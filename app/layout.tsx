@@ -1,16 +1,5 @@
 import type { Metadata } from "next";
-import { Manrope, Sora } from "next/font/google";
 import "./globals.css";
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-manrope",
-});
-
-const sora = Sora({
-  subsets: ["latin"],
-  variable: "--font-sora",
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
@@ -50,7 +39,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full" data-scroll-behavior="smooth">
-      <body className={`${manrope.variable} ${sora.variable} flex min-h-full flex-col antialiased`}>
+      <body className="flex min-h-full flex-col antialiased">
         {children}
       </body>
     </html>

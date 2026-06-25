@@ -1,6 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Sora:wght@100..800&display=swap');
 @import "tailwindcss";
 
 :root {
+  --font-manrope: 'Manrope', "Segoe UI", sans-serif;
+  --font-sora: 'Sora', "Trebuchet MS", sans-serif;
   --bg-page: #f6f7fc;
   --ink-main: #1d254a;
   --ink-soft: #6f7696;
