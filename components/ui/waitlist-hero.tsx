@@ -15,6 +15,13 @@ export const WaitlistHero = () => {
     e.preventDefault()
     if (!email || !fullName) return
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setStatus("error")
+      setErrorMessage("Please enter a valid email address.")
+      return
+    }
+
     setStatus("loading")
     setErrorMessage("")
 
@@ -139,7 +146,7 @@ export const WaitlistHero = () => {
       `}</style>
 
       <div
-        className="relative w-full min-h-screen flex flex-col items-center justify-center overflow-hidden"
+        className="relative w-full min-h-screen flex flex-col items-center justify-center overflow-hidden py-12"
         style={{ background: "#06060a" }}
       >
         {/* ── Animated Background ── */}
@@ -385,27 +392,18 @@ export const WaitlistHero = () => {
 
         {/* ── Footer ── */}
         <div
-          className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-2 z-10"
-          style={{ color: "#3f3f46" }}
+          className="relative mt-10 w-full flex flex-wrap items-center justify-center gap-x-3 gap-y-2 z-10 px-4 text-[15px] sm:text-base font-medium"
+          style={{ color: "#a1a1aa" }}
         >
-          <a
-            href="https://kredex.vercel.app/"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs transition-colors hover:text-zinc-400"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            kredex.vercel.app
-          </a>
-
-          <span>·</span>
+          <span>Follow us for updates:</span>
           <a
             href="https://x.com/kredexweb3"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 text-xs transition-colors hover:text-zinc-400"
+            className="flex items-center gap-2 text-white bg-blue-500/10 border border-blue-400/30 px-4 py-2 rounded-full hover:bg-blue-500/20 hover:border-blue-400/50 transition-all shadow-[0_0_20px_rgba(59,130,246,0.15)]"
           >
-            𝕏 @kredexweb3
+            <span className="font-bold text-lg leading-none mt-[-2px]">𝕏</span>
+            @kredexweb3
           </a>
         </div>
       </div>
