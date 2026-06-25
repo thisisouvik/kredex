@@ -1,368 +1,414 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState } from "react"
+import Image from "next/image"
 import { getBrowserSupabaseClient } from "@/lib/supabase/client"
-import { CheckCircle2, Loader2, Rocket } from "lucide-react"
+import { ArrowRight, User, Mail, Globe, CheckCircle2, Loader2 } from "lucide-react"
 
 export const WaitlistHero = () => {
+  const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [errorMessage, setErrorMessage] = useState("")
-  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email) return
+    if (!email || !fullName) return
 
     setStatus("loading")
     setErrorMessage("")
 
     try {
       const supabase = getBrowserSupabaseClient()
-      
+
       if (!supabase) {
         throw new Error("Supabase client is not initialized")
       }
 
       const { error } = await supabase
         .from("waitlist")
-        .insert([{ email }])
+        .insert([{ email, full_name: fullName }])
 
-      // 23505 is the PostgreSQL error code for unique violation
-      if (error && error.code !== '23505') {
+      // 23505 = PostgreSQL unique violation (email already exists)
+      if (error && error.code !== "23505") {
         throw error
       }
 
-      // If success or already exists, we show success state
       setStatus("success")
       setEmail("")
-      fireConfetti()
-    } catch (err: any) {
+      setFullName("")
+    } catch (err: unknown) {
       console.error("Waitlist error:", err)
       setStatus("error")
-      setErrorMessage(err.message || "Failed to join waitlist. Try again.")
+      const message = err instanceof Error ? err.message : "Failed to join waitlist. Try again."
+      setErrorMessage(message)
     }
-  }
-
-  // --- Confetti Logic ---
-  const fireConfetti = () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    const particles: any[] = []
-    const colors = ["#0079da", "#10b981", "#fbbf24", "#f472b6", "#fff"]
-
-    // Resize canvas to cover the button area mostly
-    canvas.width = canvas.offsetWidth
-    canvas.height = canvas.offsetHeight
-
-    const createParticle = () => {
-      return {
-        x: canvas.width / 2,
-        y: canvas.height / 2,
-        vx: (Math.random() - 0.5) * 12, // Random spread X
-        vy: (Math.random() - 2) * 10, // Upward velocity
-        life: 100,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        size: Math.random() * 4 + 2,
-      }
-    }
-
-    // Create batch of particles
-    for (let i = 0; i < 60; i++) {
-      particles.push(createParticle())
-    }
-
-    const animate = () => {
-      if (particles.length === 0) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
-        return
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i]
-        p.x += p.vx
-        p.y += p.vy
-        p.vy += 0.5 // Gravity
-        p.life -= 2
-
-        ctx.fillStyle = p.color
-        ctx.globalAlpha = Math.max(0, p.life / 100)
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
-        ctx.fill()
-
-        if (p.life <= 0) {
-          particles.splice(i, 1)
-          i--
-        }
-      }
-
-      requestAnimationFrame(animate)
-    }
-
-    animate()
-  }
-
-  // Color tokens
-  const colors = {
-    textMain: "#ffffff",
-    textSecondary: "#94a3b8",
-    bluePrimary: "#3b82f6", // tailwind blue-500
-    success: "#10b981", // emerald-500
-    inputBg: "#18181b", // zinc-900
-    baseBg: "#09090b", // zinc-950
-    inputShadow: "rgba(255, 255, 255, 0.1)",
   }
 
   return (
-    <div className="w-full min-h-screen bg-black flex items-center justify-center font-sans overflow-hidden">
-      {/* Animation Styles */}
+    <>
       <style>{`
-        @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        /* ---- Animated background particles ---- */
+        @keyframes float-up {
+          0%   { transform: translateY(100vh) scale(0);  opacity: 0; }
+          10%  { opacity: 0.6; }
+          90%  { opacity: 0.3; }
+          100% { transform: translateY(-10vh) scale(1);  opacity: 0; }
         }
-        .animate-spin-slow {
-          animation: spin-slow 90s linear infinite;
+        @keyframes pulse-glow {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50%       { opacity: 0.7; transform: scale(1.08); }
         }
-        @keyframes spin-slow-reverse {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(-360deg); }
+        @keyframes orbit {
+          from { transform: rotate(0deg) translateX(180px) rotate(0deg); }
+          to   { transform: rotate(360deg) translateX(180px) rotate(-360deg); }
         }
-        .animate-spin-slow-reverse {
-          animation: spin-slow-reverse 90s linear infinite;
+        @keyframes orbit-reverse {
+          from { transform: rotate(0deg) translateX(240px) rotate(0deg); }
+          to   { transform: rotate(-360deg) translateX(240px) rotate(360deg); }
         }
-        @keyframes bounce-in {
-          0% { transform: scale(0.8); opacity: 0; }
-          50% { transform: scale(1.05); opacity: 1; }
-          100% { transform: scale(1); opacity: 1; }
+        @keyframes fade-slide-up {
+          from { opacity: 0; transform: translateY(24px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        .animate-bounce-in {
-          animation: bounce-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        @keyframes success-pop {
+          0%   { opacity: 0; transform: scale(0.85); }
+          60%  { transform: scale(1.04); }
+          100% { opacity: 1; transform: scale(1); }
         }
-        @keyframes success-pulse {
-          0% { transform: scale(0.5); opacity: 0; }
-          50% { transform: scale(1.1); }
-          70% { transform: scale(0.95); }
-          100% { transform: scale(1); opacity: 1; }
+
+        .particle {
+          position: absolute;
+          border-radius: 50%;
+          animation: float-up linear infinite;
+          pointer-events: none;
         }
-        @keyframes success-glow {
-          0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
-          50% { box-shadow: 0 0 60px rgba(16, 185, 129, 0.8), 0 0 100px rgba(16, 185, 129, 0.4); }
+        .glow-core {
+          animation: pulse-glow 6s ease-in-out infinite;
         }
-        @keyframes celebration-ring {
-          0% { transform: translate(-50%, -50%) scale(0.8); opacity: 1; }
-          100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+        .orbit-dot {
+          position: absolute;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #2563eb;
+          top: 50%;
+          left: 50%;
+          margin: -3px 0 0 -3px;
+          animation: orbit 12s linear infinite;
+          box-shadow: 0 0 12px 3px rgba(37,99,235,0.7);
         }
-        .animate-success-pulse {
-          animation: success-pulse 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        .orbit-dot-2 {
+          position: absolute;
+          width: 4px;
+          height: 4px;
+          border-radius: 50%;
+          background: #60a5fa;
+          top: 50%;
+          left: 50%;
+          margin: -2px 0 0 -2px;
+          animation: orbit-reverse 18s linear infinite;
+          box-shadow: 0 0 10px 3px rgba(96,165,250,0.5);
         }
-        .animate-success-glow {
-          animation: success-glow 2s ease-in-out infinite;
+        .hero-content {
+          animation: fade-slide-up 0.8s ease forwards;
         }
-        .animate-ring {
-          animation: celebration-ring 0.8s ease-out forwards;
+        .hero-content-delay {
+          animation: fade-slide-up 0.8s ease 0.15s both;
+        }
+        .hero-content-delay-2 {
+          animation: fade-slide-up 0.8s ease 0.3s both;
+        }
+        .success-anim {
+          animation: success-pop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+        }
+
+        /* ---- Input focus ring ---- */
+        .wl-input:focus {
+          outline: none;
+          border-color: rgba(37,99,235,0.45);
+          box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+        }
+        .wl-btn:hover:not(:disabled) {
+          background: #1d4ed8;
+          box-shadow: 0 0 28px rgba(37,99,235,0.55);
+        }
+        .wl-btn:active:not(:disabled) {
+          transform: scale(0.97);
         }
       `}</style>
 
-      {/* Main Container */}
       <div
-        className="relative w-full h-screen overflow-hidden shadow-2xl"
-        style={{
-          backgroundColor: colors.baseBg,
-        }}
+        className="relative w-full min-h-screen flex flex-col items-center justify-center overflow-hidden"
+        style={{ background: "#06060a" }}
       >
-        {/* Background Decorative Layer */}
+        {/* ── Animated Background ── */}
+        {/* Deep radial glow behind content */}
         <div
-          className="absolute inset-0 w-full h-full pointer-events-none"
+          className="absolute inset-0 pointer-events-none"
           style={{
-            perspective: "1200px",
-            transform: "perspective(1200px) rotateX(20deg) scale(1.2)",
-            transformOrigin: "center bottom",
-            opacity: 0.8,
-          }}
-        >
-          {/* Image 3 (Back) - spins clockwise */}
-          <div className="absolute inset-0 animate-spin-slow">
-            <div
-              className="absolute top-1/2 left-1/2"
-              style={{
-                width: "2000px",
-                height: "2000px",
-                transform: "translate(-50%, -50%) rotate(279.05deg)",
-                zIndex: 0,
-              }}
-            >
-              <img
-                src="https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2000&auto=format&fit=crop"
-                alt=""
-                className="w-full h-full object-cover opacity-30 mix-blend-screen"
-              />
-            </div>
-          </div>
-
-          {/* Image 2 (Middle) - spins counter-clockwise */}
-          <div className="absolute inset-0 animate-spin-slow-reverse">
-            <div
-              className="absolute top-1/2 left-1/2"
-              style={{
-                width: "1200px",
-                height: "1200px",
-                transform: "translate(-50%, -50%) rotate(304.42deg)",
-                zIndex: 1,
-              }}
-            >
-              <img
-                src="https://images.unsplash.com/photo-1639762681485-074b7f4ec651?q=80&w=1200&auto=format&fit=crop"
-                alt=""
-                className="w-full h-full object-cover opacity-40 mix-blend-screen"
-              />
-            </div>
-          </div>
-
-          {/* Image 1 (Front) - spins clockwise */}
-          <div className="absolute inset-0 animate-spin-slow">
-            <div
-              className="absolute top-1/2 left-1/2"
-              style={{
-                width: "800px",
-                height: "800px",
-                transform: "translate(-50%, -50%) rotate(48.33deg)",
-                zIndex: 2,
-              }}
-            >
-              <img
-                src="https://images.unsplash.com/photo-1620321023374-d1a68fbc720d?q=80&w=800&auto=format&fit=crop"
-                alt=""
-                className="w-full h-full object-cover opacity-60 mix-blend-overlay"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Gradient Overlay to ensure text readability */}
-        <div
-          className="absolute inset-0 z-10 pointer-events-none"
-          style={{
-            background: `radial-gradient(circle at center, transparent 0%, ${colors.baseBg} 80%), linear-gradient(to top, ${colors.baseBg} 15%, rgba(9, 9, 11, 0.4) 60%, transparent 100%)`,
+            background:
+              "radial-gradient(ellipse 70% 55% at 50% 55%, rgba(23,55,140,0.22) 0%, transparent 70%)",
           }}
         />
 
-        {/* Content Container */}
-        <div className="relative z-20 w-full h-full flex flex-col items-center justify-end pb-20 md:pb-32 gap-6 px-4">
-          <div className="w-20 h-20 rounded-3xl shadow-2xl overflow-hidden mb-4 ring-1 ring-white/20 bg-gradient-to-tr from-blue-600 to-emerald-400 p-[2px]">
-             <div className="w-full h-full bg-zinc-950 rounded-3xl flex items-center justify-center">
-                <Rocket className="w-10 h-10 text-emerald-400" />
-             </div>
+        {/* Grid lines */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+            maskImage:
+              "radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%)",
+          }}
+        />
+
+        {/* Floating particles */}
+        {[
+          { left: "10%", w: 4, delay: "0s",   dur: "14s", color: "rgba(59,130,246,0.5)" },
+          { left: "22%", w: 3, delay: "3s",   dur: "18s", color: "rgba(99,179,255,0.4)" },
+          { left: "40%", w: 5, delay: "1.5s", dur: "11s", color: "rgba(37,99,235,0.45)" },
+          { left: "58%", w: 3, delay: "5s",   dur: "16s", color: "rgba(96,165,250,0.4)" },
+          { left: "75%", w: 4, delay: "2s",   dur: "13s", color: "rgba(59,130,246,0.5)" },
+          { left: "88%", w: 3, delay: "7s",   dur: "20s", color: "rgba(147,197,253,0.35)" },
+        ].map((p, i) => (
+          <div
+            key={i}
+            className="particle"
+            style={{
+              left: p.left,
+              bottom: "-10px",
+              width: p.w,
+              height: p.w,
+              background: p.color,
+              animationDelay: p.delay,
+              animationDuration: p.dur,
+              boxShadow: `0 0 ${p.w * 3}px ${p.color}`,
+            }}
+          />
+        ))}
+
+        {/* Orbiting dots around centre-glow */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: 1,
+            height: 1,
+          }}
+        >
+          <div className="orbit-dot" />
+          <div className="orbit-dot-2" />
+        </div>
+
+        {/* ── Hero Card ── */}
+        <div className="relative z-10 w-full max-w-md mx-auto px-5 flex flex-col items-center text-center">
+
+          {/* Logo */}
+          <div className="hero-content mb-8">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden"
+              style={{
+                background: "linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%)",
+                boxShadow: "0 0 32px rgba(37,99,235,0.35), 0 2px 8px rgba(0,0,0,0.6)",
+              }}
+            >
+              <Image
+                src="/logo.png"
+                alt="KRedex Logo"
+                width={48}
+                height={48}
+                className="object-contain"
+                priority
+              />
+            </div>
           </div>
 
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-center tracking-tight leading-tight max-w-4xl" style={{ color: colors.textMain }}>
-            Reputation is your <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">credit score.</span>
+          {/* Badge */}
+          <div className="hero-content mb-6">
+            <span
+              className="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase px-4 py-1.5 rounded-full border"
+              style={{
+                color: "#60a5fa",
+                borderColor: "rgba(37,99,235,0.35)",
+                background: "rgba(37,99,235,0.08)",
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-blue-400"
+                style={{ boxShadow: "0 0 6px #60a5fa" }}
+              />
+              Early Access — Limited Spots
+            </span>
+          </div>
+
+          {/* Headline */}
+          <h1
+            className="hero-content-delay text-3xl sm:text-4xl font-bold leading-tight tracking-tight mb-4"
+            style={{ color: "#ffffff" }}
+          >
+            Secure P2P Lending &amp; Borrowing,{" "}
+            <span
+              style={{
+                background: "linear-gradient(90deg,#3b82f6,#60a5fa)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              Built on KRedex.
+            </span>
           </h1>
 
-          <p className="text-lg md:text-xl font-medium text-center max-w-2xl leading-relaxed mb-4" style={{ color: colors.textSecondary }}>
-            TrustLend is a decentralized micro-lending platform. Earn trust, unlock capital, and build financial access. Join the waitlist for early access to the mainnet.
+          {/* Subtitle */}
+          <p
+            className="hero-content-delay text-sm sm:text-base leading-relaxed mb-10"
+            style={{ color: "#71717a", maxWidth: "340px" }}
+          >
+            KRedex is launching soon. Stay tuned for something exciting! Be the first to access decentralized P2P lending.
           </p>
 
-          {/* Form / Success Container */}
-          <div className="w-full max-w-md h-[64px] relative perspective-1000 mt-2">
-            {/* Confetti Canvas - overlays everything but ignores clicks */}
-            <canvas
-              ref={canvasRef}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] pointer-events-none z-50"
-            />
-
-            {/* SUCCESS STATE */}
-            <div
-              className={`absolute inset-0 flex items-center justify-center rounded-full transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                status === "success"
-                  ? "opacity-100 scale-100 rotate-x-0 animate-success-pulse animate-success-glow"
-                  : "opacity-0 scale-95 -rotate-x-90 pointer-events-none"
-              }`}
-              style={{ backgroundColor: colors.success }}
-            >
-              {/* Celebration rings */}
-              {status === "success" && (
-                <>
-                  <div
-                    className="absolute top-1/2 left-1/2 w-full h-full rounded-full border-2 border-emerald-400 animate-ring"
-                    style={{ animationDelay: "0s" }}
-                  />
-                  <div
-                    className="absolute top-1/2 left-1/2 w-full h-full rounded-full border-2 border-emerald-300 animate-ring"
-                    style={{ animationDelay: "0.15s" }}
-                  />
-                  <div
-                    className="absolute top-1/2 left-1/2 w-full h-full rounded-full border-2 border-emerald-200 animate-ring"
-                    style={{ animationDelay: "0.3s" }}
-                  />
-                </>
-              )}
+          {/* ── Form / Success ── */}
+          {status === "success" ? (
+            <div className="success-anim w-full flex flex-col items-center gap-4 py-6">
               <div
-                className={`flex items-center gap-3 text-white font-semibold text-lg ${status === "success" ? "animate-bounce-in" : ""}`}
+                className="w-14 h-14 rounded-full flex items-center justify-center"
+                style={{ background: "rgba(16,185,129,0.12)", boxShadow: "0 0 24px rgba(16,185,129,0.3)" }}
               >
-                <div className="bg-white/20 p-1 rounded-full">
-                   <CheckCircle2 className="w-6 h-6 text-white" />
-                </div>
-                <span>You're on the list!</span>
+                <CheckCircle2 className="w-7 h-7" style={{ color: "#10b981" }} />
               </div>
+              <h3 className="text-xl font-semibold text-white">You&apos;re on the list!</h3>
+              <p className="text-sm" style={{ color: "#71717a" }}>
+                We&apos;ll notify you the moment we go live.
+              </p>
+              <button
+                onClick={() => setStatus("idle")}
+                className="mt-4 text-xs underline underline-offset-2 transition-colors"
+                style={{ color: "#52525b" }}
+              >
+                Join with another account
+              </button>
             </div>
-
-            {/* FORM STATE */}
+          ) : (
             <form
               onSubmit={handleSubmit}
-              className={`relative w-full h-full group transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                status === "success"
-                  ? "opacity-0 scale-95 rotate-x-90 pointer-events-none"
-                  : "opacity-100 scale-100 rotate-x-0"
-              }`}
+              className="hero-content-delay-2 w-full flex flex-col gap-3"
             >
-              <input
-                type="email"
-                required
-                placeholder="Enter your email address"
-                value={email}
-                disabled={status === "loading"}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-full pl-6 pr-[160px] rounded-full outline-none transition-all duration-200 placeholder-zinc-500 disabled:opacity-70 disabled:cursor-not-allowed focus:ring-2 focus:ring-blue-500/50"
-                style={{
-                  backgroundColor: colors.inputBg,
-                  color: colors.textMain,
-                  boxShadow: `inset 0 0 0 1px ${colors.inputShadow}`,
-                }}
-              />
-
-              <div className="absolute top-[6px] right-[6px] bottom-[6px]">
-                <button
-                  type="submit"
+              {/* Full name */}
+              <div className="relative">
+                <User
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+                  style={{ color: "#52525b" }}
+                />
+                <input
+                  type="text"
+                  required
+                  placeholder="Full name"
+                  value={fullName}
                   disabled={status === "loading"}
-                  className="h-full px-6 rounded-full font-medium text-white transition-all active:scale-95 hover:brightness-110 disabled:hover:brightness-100 disabled:active:scale-100 disabled:cursor-wait flex items-center justify-center min-w-[140px] bg-gradient-to-r from-blue-600 to-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)]"
-                >
-                  {status === "loading" ? (
-                    <Loader2 className="w-5 h-5 animate-spin text-white" />
-                  ) : (
-                    "Join Waitlist"
-                  )}
-                </button>
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="wl-input w-full rounded-xl py-4 pl-11 pr-4 text-sm text-white placeholder-zinc-600 transition-all disabled:opacity-50"
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                  }}
+                />
               </div>
+
+              {/* Email */}
+              <div className="relative">
+                <Mail
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+                  style={{ color: "#52525b" }}
+                />
+                <input
+                  type="email"
+                  required
+                  placeholder="Email address"
+                  value={email}
+                  disabled={status === "loading"}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="wl-input w-full rounded-xl py-4 pl-11 pr-4 text-sm text-white placeholder-zinc-600 transition-all disabled:opacity-50"
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                  }}
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="wl-btn w-full rounded-xl py-4 flex items-center justify-center gap-2 font-semibold text-sm text-white transition-all duration-200 disabled:opacity-60 disabled:cursor-wait mt-1"
+                style={{
+                  background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)",
+                  boxShadow: "0 0 20px rgba(37,99,235,0.4)",
+                }}
+              >
+                {status === "loading" ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    Join the Waitlist
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              {status === "error" && (
+                <p
+                  className="text-xs text-center px-4 py-2.5 rounded-lg border"
+                  style={{
+                    color: "#f87171",
+                    background: "rgba(239,68,68,0.08)",
+                    borderColor: "rgba(239,68,68,0.2)",
+                  }}
+                >
+                  {errorMessage}
+                </p>
+              )}
             </form>
-          </div>
-          
-          {/* Error Message */}
-          {status === "error" && (
-            <p className="text-red-400 text-sm font-medium mt-2 animate-bounce-in bg-red-950/50 px-4 py-2 rounded-full border border-red-900/50">
-              {errorMessage}
-            </p>
           )}
 
+          {/* Trust badges */}
+          <div className="mt-8 flex items-center gap-3" style={{ color: "#3f3f46" }}>
+            <span className="text-xs">🔒 No spam</span>
+            <span className="text-xs">•</span>
+            <span className="text-xs">✦ Early-access perks</span>
+            <span className="text-xs">•</span>
+            <span className="text-xs">⚡ Launch alert</span>
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div
+          className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-2 z-10"
+          style={{ color: "#3f3f46" }}
+        >
+          <a
+            href="https://kredex.vercel.app/"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-xs transition-colors hover:text-zinc-400"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            kredex.vercel.app
+          </a>
+
+          <span>·</span>
+          <a
+            href="https://x.com/kredexweb3"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-xs transition-colors hover:text-zinc-400"
+          >
+            𝕏 @kredexweb3
+          </a>
         </div>
       </div>
-    </div>
+    </>
   )
 }
