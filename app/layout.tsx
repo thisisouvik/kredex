@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Manrope, Sora } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const manrope = Manrope({
   subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
+  variable: "--font-manrope",
+});
+
+const sora = Sora({
+  subsets: ["latin"],
+  variable: "--font-sora",
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://kredex.vercel.app/"),
-  title: "KRedex — Secure and Easy P2P Lending and Borrowing",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  title: "TrustLend — Reputation-Based Micro-Lending for Everyone",
   description:
-    "KRedex is a decentralized micro-lending marketplace that empowers users to access secure and easy P2P lending and borrowing based on trust.",
+    "TrustLend is a decentralized micro-lending marketplace that empowers unbanked gig workers and freelancers in emerging markets to access credit based on real financial behavior — not collateral or credit history.",
   keywords: [
-    "KRedex",
+    "TrustLend",
     "micro-lending",
     "DeFi",
     "blockchain",
@@ -23,20 +27,19 @@ export const metadata: Metadata = {
     "unbanked",
     "gig economy",
     "crypto lending",
-    "P2P lending"
   ],
-  authors: [{ name: "KRedex" }],
+  authors: [{ name: "TrustLend" }],
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",
     apple: "/logo.png",
   },
   openGraph: {
-    title: "KRedex — Secure and Easy P2P Lending and Borrowing",
+    title: "TrustLend — Reputation-Based Micro-Lending",
     description:
-      "Access credit based on real financial behavior and trust.",
+      "Access credit based on real financial behavior. 1.7 billion unbanked adults deserve better.",
     type: "website",
-    images: [{ url: "/logo.png", width: 512, height: 512, alt: "KRedex Logo" }],
+    images: [{ url: "/logo.png", width: 512, height: 512, alt: "TrustLend Logo" }],
   },
 };
 
@@ -46,8 +49,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`h-full ${inter.variable}`} data-scroll-behavior="smooth">
-      <body className="flex min-h-full flex-col antialiased" style={{ background: "#06060a" }}>
+    <html lang="en" className="h-full" data-scroll-behavior="smooth">
+      <body className={`${manrope.variable} ${sora.variable} flex min-h-full flex-col antialiased`}>
         {children}
       </body>
     </html>
