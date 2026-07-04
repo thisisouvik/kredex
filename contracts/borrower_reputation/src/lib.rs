@@ -15,16 +15,20 @@ pub enum ReputationTier {
 }
 
 /// Reputation events — each one carries a fixed point delta.
+///
+/// These are stored as u32 discriminants when invoked via cross-contract calls
+/// from the LendingContract (which passes the variant index as a u32).
+/// Variant order MUST NOT change after deployment.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReputationEvent {
-    TestLoanRepaid,    // +50 pts
-    LoanRepaidOnTime,  // +20 pts
-    LoanPaidEarly,     // +30 pts
-    LoanLate1Day,      // -5  pts
-    LoanLate7Days,     // -50 pts
-    LoanDefaulted,     // -100 pts
-    LateWarning,       // -50 pts (applied on Day 8 of overdue)
+    TestLoanRepaid,    // 0  +50 pts
+    LoanRepaidOnTime,  // 1  +20 pts
+    LoanPaidEarly,     // 2  +30 pts
+    LoanLate1Day,      // 3  -5  pts
+    LoanLate7Days,     // 4  -50 pts
+    LoanDefaulted,     // 5  -100 pts — NOTE: was index 6 in old contract, now 5
+    LateWarning,       // 6  -50 pts (applied on Day 8 of overdue)
 }
 
 /// Full on-chain borrower profile stored in persistent ledger storage.
@@ -35,9 +39,9 @@ pub struct BorrowerProfile {
     /// Raw score: 0..=1000+
     pub reputation_score: i128,
     pub reputation_tier: ReputationTier,
-    /// Total XLM ever borrowed (stroops)
+    /// Total USDC ever borrowed (stroops)
     pub total_borrowed: i128,
-    /// Total XLM ever repaid (stroops)
+    /// Total USDC ever repaid (stroops)
     pub total_repaid: i128,
     pub default_count: u32,
     /// Successful loans repaid
@@ -52,8 +56,10 @@ pub struct BorrowerProfile {
 #[contracttype]
 pub enum DataKey {
     BorrowerProfile(Address),
-    /// Stores the contract admin Address
     Admin,
+    /// Address of the LendingContract — allowed to call add_reputation_event
+    /// and update_loan_totals in addition to the admin.
+    LendingContract,
 }
 
 // ─── Contract ─────────────────────────────────────────────────────────────────
@@ -63,20 +69,35 @@ pub struct BorrowerReputationContract;
 
 #[contractimpl]
 impl BorrowerReputationContract {
-    // ── Admin ─────────────────────────────────────────────────────────────────
+    // ── Admin / Init ──────────────────────────────────────────────────────────
 
-    /// One-time init — must be called right after deployment.
-    pub fn initialize(env: Env, admin: Address) {
+    /// One-time initialisation.
+    ///
+    /// `lending_contract` — the deployed LendingContract address.
+    /// This address is allowed to mutate reputation state in addition to `admin`,
+    /// enabling fully on-chain reputation updates from repayment/default events.
+    pub fn initialize(env: Env, admin: Address, lending_contract: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("Contract already initialised");
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage()
+            .instance()
+            .set(&DataKey::LendingContract, &lending_contract);
     }
 
     pub fn get_admin(env: Env) -> Address {
         env.storage()
             .instance()
             .get(&DataKey::Admin)
+            .expect("Contract not initialised")
+    }
+
+    pub fn get_lending_contract(env: Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&DataKey::LendingContract)
             .expect("Contract not initialised")
     }
 
@@ -119,7 +140,7 @@ impl BorrowerReputationContract {
 
     // ── Loan eligibility ──────────────────────────────────────────────────────
 
-    /// Max loan in stroops (1 XLM = 10_000_000 stroops).
+    /// Max loan in USDC stroops (1 USDC = 10_000_000 stroops).
     pub fn calculate_max_loan(env: Env, borrower: Address) -> i128 {
         let profile = Self::get_profile(env, borrower);
         Self::tier_max_loan(&profile.reputation_tier)
@@ -131,10 +152,16 @@ impl BorrowerReputationContract {
         Self::tier_interest_rate(&profile.reputation_tier)
     }
 
-    // ── Mutations (admin-only for MVP) ────────────────────────────────────────
+    // ── Mutations (admin OR lending contract) ─────────────────────────────────
 
     /// Apply a reputation event.
-    /// `caller` must be the admin (or an authorised lending contract in future).
+    ///
+    /// Caller must be either:
+    ///   - The `admin` address, OR
+    ///   - The `lending_contract` address (set at initialize).
+    ///
+    /// This makes on-chain reputation updates from LendingContract.record_payment()
+    /// and LendingContract.mark_defaulted() fully trustless — no admin key needed.
     pub fn add_reputation_event(
         env: Env,
         caller: Address,
@@ -142,7 +169,7 @@ impl BorrowerReputationContract {
         event: ReputationEvent,
     ) {
         caller.require_auth();
-        Self::assert_admin(&env, &caller);
+        Self::assert_admin_or_lending(&env, &caller);
 
         let key = DataKey::BorrowerProfile(borrower.clone());
         let mut profile: BorrowerProfile = env
@@ -170,7 +197,7 @@ impl BorrowerReputationContract {
         env.storage().persistent().set(&key, &profile);
     }
 
-    /// Update cumulative borrowed/repaid amounts.
+    /// Update cumulative borrowed/repaid amounts (admin or lending contract).
     pub fn update_loan_totals(
         env: Env,
         caller: Address,
@@ -179,7 +206,7 @@ impl BorrowerReputationContract {
         repaid_delta: i128,
     ) {
         caller.require_auth();
-        Self::assert_admin(&env, &caller);
+        Self::assert_admin_or_lending(&env, &caller);
 
         let key = DataKey::BorrowerProfile(borrower.clone());
         let mut profile: BorrowerProfile = env
@@ -238,13 +265,13 @@ impl BorrowerReputationContract {
     /// Returns (points_delta, is_default_event, is_repaid_event).
     fn event_info(event: &ReputationEvent) -> (i32, bool, bool) {
         match event {
-            ReputationEvent::TestLoanRepaid   => (50,  false, true),
-            ReputationEvent::LoanRepaidOnTime => (20,  false, true),
-            ReputationEvent::LoanPaidEarly    => (30,  false, true),
-            ReputationEvent::LoanLate1Day     => (-5,  false, false),
-            ReputationEvent::LoanLate7Days    => (-50, false, false),
-            ReputationEvent::LoanDefaulted    => (-100, true, false),
-            ReputationEvent::LateWarning      => (-50, false, false),
+            ReputationEvent::TestLoanRepaid   => (50,   false, true),
+            ReputationEvent::LoanRepaidOnTime => (20,   false, true),
+            ReputationEvent::LoanPaidEarly    => (30,   false, true),
+            ReputationEvent::LoanLate1Day     => (-5,   false, false),
+            ReputationEvent::LoanLate7Days    => (-50,  false, false),
+            ReputationEvent::LoanDefaulted    => (-100, true,  false),
+            ReputationEvent::LateWarning      => (-50,  false, false),
         }
     }
 
@@ -263,12 +290,13 @@ impl BorrowerReputationContract {
     }
 
     fn tier_max_loan(tier: &ReputationTier) -> i128 {
+        // 1 USDC = 10_000_000 stroops
         match tier {
-            ReputationTier::None     => 1_000_0000000,    // 1,000 XLM
-            ReputationTier::Beginner => 2_000_0000000,    // 2,000 XLM
-            ReputationTier::Silver   => 5_000_0000000,    // 5,000 XLM
-            ReputationTier::Gold     => 10_000_0000000,   // 10,000 XLM
-            ReputationTier::Platinum => 100_000_0000000,  // 100,000 XLM
+            ReputationTier::None     =>     100_0000000, //     100 USDC
+            ReputationTier::Beginner =>     500_0000000, //     500 USDC
+            ReputationTier::Silver   =>   2_000_0000000, //   2,000 USDC
+            ReputationTier::Gold     =>  10_000_0000000, //  10,000 USDC
+            ReputationTier::Platinum => 100_000_0000000, // 100,000 USDC
         }
     }
 
@@ -279,6 +307,23 @@ impl BorrowerReputationContract {
             ReputationTier::Silver   => 1200, // 12.00 %
             ReputationTier::Gold     => 1000, // 10.00 %
             ReputationTier::Platinum =>  800, //  8.00 %
+        }
+    }
+
+    /// Passes if caller is admin OR the authorised lending contract.
+    fn assert_admin_or_lending(env: &Env, caller: &Address) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("Contract not initialised");
+        let lending: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::LendingContract)
+            .expect("Contract not initialised");
+        if *caller != admin && *caller != lending {
+            panic!("Unauthorised: caller is not admin or lending contract");
         }
     }
 

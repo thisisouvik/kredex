@@ -1,5 +1,9 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short,
+    Address, Env,
+};
+use soroban_sdk::token::TokenClient;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -7,11 +11,11 @@ use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DefaultPhase {
-    /// Days 1-7 — friendly reminders, no penalty yet
+    /// Days 1–7  — friendly reminders, no penalty yet
     Friendly,
-    /// Days 8-21 — reputation hit, blacklisted from new loans
+    /// Days 8–21 — reputation hit, blacklisted from new loans
     Warning,
-    /// Days 22-60 — wallet frozen, platform enforcement
+    /// Days 22–60 — wallet frozen, platform enforcement
     Enforcement,
     /// 60+ days — reported; insurance/collection triggered
     Reported,
@@ -23,7 +27,7 @@ pub enum DefaultPhase {
 pub struct DefaultRecord {
     pub loan_id: u32,
     pub borrower: Address,
-    /// Principal amount in stroops
+    /// Principal amount in USDC stroops
     pub amount: i128,
     /// Ledger timestamp when this record was created
     pub recorded_at: u64,
@@ -31,7 +35,7 @@ pub struct DefaultRecord {
     pub phase: DefaultPhase,
 }
 
-/// Insurance fund event.
+/// Insurance fund payout event — stored for full audit trail.
 #[contracttype]
 #[derive(Clone)]
 pub struct InsuranceEvent {
@@ -39,16 +43,22 @@ pub struct InsuranceEvent {
     pub lender: Address,
     pub amount_paid: i128,
     pub paid_at: u64,
+    /// Token address for audit (always USDC)
+    pub token: Address,
 }
 
 /// Ledger storage keys.
 #[contracttype]
 pub enum DataKey {
     DefaultRecord(u32),
+    /// Insurance fund balance in USDC stroops.
+    /// Physical USDC is held BY this contract; balance mirrors token holdings.
     InsuranceBalance,
     InsuranceEvent(u32),
     InsuranceEventCount,
     Admin,
+    /// Verified USDC token address — set ONCE at initialize(), never changed.
+    UsdcToken,
 }
 
 // ─── Contract ─────────────────────────────────────────────────────────────────
@@ -58,19 +68,46 @@ pub struct DefaultManagementContract;
 
 #[contractimpl]
 impl DefaultManagementContract {
-    // ── Admin ─────────────────────────────────────────────────────────────────
+    // ── Admin / Init ──────────────────────────────────────────────────────────
 
-    pub fn initialize(env: Env, admin: Address, initial_insurance_balance: i128) {
+    /// One-time initialisation with insurance fund seeding.
+    ///
+    /// `usdc_token`           — SEP-41 USDC contract address.
+    /// `insurance_seed_amount`— Initial USDC stroops the admin transfers into
+    ///                          the contract to bootstrap the insurance fund.
+    ///                          Pass 0 to skip seeding (can add later via
+    ///                          `add_to_insurance`).
+    ///
+    /// When `insurance_seed_amount > 0`:
+    ///   Step 1 — `token.transfer(admin → contract)` FIRST.
+    ///   Step 2 — InsuranceBalance stored after successful transfer.
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        usdc_token: Address,
+        insurance_seed_amount: i128,
+    ) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("Contract already initialised");
         }
+        admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage()
-            .persistent()
-            .set(&DataKey::InsuranceBalance, &initial_insurance_balance);
+        env.storage().instance().set(&DataKey::UsdcToken, &usdc_token);
         env.storage()
             .instance()
             .set(&DataKey::InsuranceEventCount, &0u32);
+
+        if insurance_seed_amount > 0 {
+            // ── Step 1: Move seed USDC from admin → contract FIRST ─────────────
+            let token = TokenClient::new(&env, &usdc_token);
+            token.transfer(&admin, &env.current_contract_address(), &insurance_seed_amount);
+            // ─────────────────────────────────────────────────────────────────
+        }
+
+        // Step 2: Record balance only after successful transfer.
+        env.storage()
+            .persistent()
+            .set(&DataKey::InsuranceBalance, &insurance_seed_amount);
     }
 
     pub fn get_admin(env: Env) -> Address {
@@ -80,11 +117,19 @@ impl DefaultManagementContract {
             .expect("Contract not initialised")
     }
 
+    pub fn get_usdc_token(env: Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&DataKey::UsdcToken)
+            .expect("Contract not initialised")
+    }
+
     // ── Default management ────────────────────────────────────────────────────
 
-    /// Called by admin/backend (daily cron) after checking Horizon for overdue
-    /// loans. `days_overdue` is calculated off-chain and passed in.
+    /// Record a default after a loan becomes overdue (admin/backend cron).
     ///
+    /// `days_overdue` is calculated off-chain (by checking the DEFAULTED event
+    /// emitted by LendingContract and computing elapsed time) and passed in.
     /// Returns the current DefaultPhase so the caller can trigger further
     /// actions (freeze wallet via ReputationContract, etc.).
     pub fn record_default(
@@ -125,7 +170,7 @@ impl DefaultManagementContract {
 
     // ── Insurance fund ────────────────────────────────────────────────────────
 
-    /// Get current insurance fund balance (in stroops).
+    /// Get current insurance fund balance (in USDC stroops).
     pub fn get_insurance_balance(env: Env) -> i128 {
         env.storage()
             .persistent()
@@ -133,20 +178,44 @@ impl DefaultManagementContract {
             .unwrap_or(0)
     }
 
-    /// Increase the insurance fund (from platform fee income).
+    /// Top up the insurance fund (admin only).
+    ///
+    /// Step 1 — `token.transfer(admin → contract)` FIRST.
+    /// Step 2 — InsuranceBalance updated after successful transfer.
     pub fn add_to_insurance(env: Env, caller: Address, amount: i128) {
         caller.require_auth();
         Self::assert_admin(&env, &caller);
 
+        if amount <= 0 {
+            panic!("Amount must be positive");
+        }
+
+        let usdc_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::UsdcToken)
+            .expect("Contract not initialised");
+
+        // ── Step 1: Transfer USDC into contract custody FIRST ─────────────────
+        let token = TokenClient::new(&env, &usdc_token);
+        token.transfer(&caller, &env.current_contract_address(), &amount);
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Step 2: Update balance record only after successful transfer.
         let current = Self::get_insurance_balance(env.clone());
         env.storage()
             .persistent()
             .set(&DataKey::InsuranceBalance, &(current + amount));
     }
 
-    /// Trigger an insurance payout to a lender for a defaulted loan.
-    /// Actual XLM moves via a PAYMENT operation by the admin wallet; this
-    /// function records the event and deducts from the fund balance.
+    /// Trigger a USDC insurance payout to a lender for a defaulted loan.
+    ///
+    /// Step 1 — Verify sufficient fund balance.
+    /// Step 2 — `token.transfer(contract → lender, amount)` FIRST.
+    ///   Physical USDC moves from contract to lender atomically.
+    ///   If the transfer fails, balance record is never touched.
+    /// Step 3 — Deduct from InsuranceBalance and log InsuranceEvent.
+    /// Step 4 — Emit `INS_PAY` event for backend indexing.
     pub fn trigger_insurance_payout(
         env: Env,
         caller: Address,
@@ -157,17 +226,32 @@ impl DefaultManagementContract {
         caller.require_auth();
         Self::assert_admin(&env, &caller);
 
+        if amount <= 0 {
+            panic!("Amount must be positive");
+        }
+
         let balance = Self::get_insurance_balance(env.clone());
         if balance < amount {
             panic!("Insufficient insurance funds");
         }
 
-        // Deduct from fund
+        let usdc_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::UsdcToken)
+            .expect("Contract not initialised");
+
+        // ── Step 2: Transfer USDC to lender FIRST ─────────────────────────────
+        // Contract holds insurance USDC → use env.current_contract_address() as from.
+        let token = TokenClient::new(&env, &usdc_token);
+        token.transfer(&env.current_contract_address(), &lender, &amount);
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Step 3: Deduct from balance and log the event — only after payout succeeds.
         env.storage()
             .persistent()
             .set(&DataKey::InsuranceBalance, &(balance - amount));
 
-        // Record the event
         let count: u32 = env
             .storage()
             .instance()
@@ -176,9 +260,10 @@ impl DefaultManagementContract {
         let new_count = count + 1;
         let event = InsuranceEvent {
             loan_id,
-            lender,
+            lender: lender.clone(),
             amount_paid: amount,
             paid_at: env.ledger().timestamp(),
+            token: usdc_token,
         };
         env.storage()
             .persistent()
@@ -186,7 +271,16 @@ impl DefaultManagementContract {
         env.storage()
             .instance()
             .set(&DataKey::InsuranceEventCount, &new_count);
+
+        // Step 4: Emit event for backend audit trail.
+        // Topics: (symbol, loan_id)  |  Data: (lender, amount)
+        env.events().publish(
+            (symbol_short!("INS_PAY"), loan_id),
+            (lender, amount),
+        );
     }
+
+    // ── Queries ───────────────────────────────────────────────────────────────
 
     pub fn get_insurance_event(env: Env, event_index: u32) -> InsuranceEvent {
         env.storage()
@@ -206,10 +300,10 @@ impl DefaultManagementContract {
 
     fn days_to_phase(days: u64) -> DefaultPhase {
         match days {
-            1..=7 => DefaultPhase::Friendly,
-            8..=21 => DefaultPhase::Warning,
+            1..=7   => DefaultPhase::Friendly,
+            8..=21  => DefaultPhase::Warning,
             22..=60 => DefaultPhase::Enforcement,
-            _ => DefaultPhase::Reported,
+            _       => DefaultPhase::Reported,
         }
     }
 
