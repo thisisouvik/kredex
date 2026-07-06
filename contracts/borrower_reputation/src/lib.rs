@@ -1,9 +1,15 @@
 #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
 
+// ─── TTL Constants ────────────────────────────────────────────────────────────
+// Borrower profiles are permanent records — use a longer target TTL (60 days).
+// Backend cron bumps these every 48 h via bump_profile_ttl().
+const LEDGERS_PER_DAY: u32 = 17_280;
+const TTL_THRESHOLD:   u32 = LEDGERS_PER_DAY * 5;  // 5 days  — trigger
+const TTL_EXTEND_TO:   u32 = LEDGERS_PER_DAY * 60; // 60 days — target for profiles
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/// Reputation tiers — determine loan limits and interest rates.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReputationTier {
@@ -14,11 +20,8 @@ pub enum ReputationTier {
     Platinum,
 }
 
-/// Reputation events — each one carries a fixed point delta.
-///
-/// These are stored as u32 discriminants when invoked via cross-contract calls
-/// from the LendingContract (which passes the variant index as a u32).
-/// Variant order MUST NOT change after deployment.
+/// Reputation events — variant ORDER must never change after deployment.
+/// The LendingContract passes variant index as u32 in cross-contract calls.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReputationEvent {
@@ -27,16 +30,14 @@ pub enum ReputationEvent {
     LoanPaidEarly,     // 2  +30 pts
     LoanLate1Day,      // 3  -5  pts
     LoanLate7Days,     // 4  -50 pts
-    LoanDefaulted,     // 5  -100 pts — NOTE: was index 6 in old contract, now 5
-    LateWarning,       // 6  -50 pts (applied on Day 8 of overdue)
+    LoanDefaulted,     // 5  -100 pts
+    LateWarning,       // 6  -50 pts
 }
 
-/// Full on-chain borrower profile stored in persistent ledger storage.
 #[contracttype]
 #[derive(Clone)]
 pub struct BorrowerProfile {
     pub address: Address,
-    /// Raw score: 0..=1000+
     pub reputation_score: i128,
     pub reputation_tier: ReputationTier,
     /// Total USDC ever borrowed (stroops)
@@ -44,21 +45,17 @@ pub struct BorrowerProfile {
     /// Total USDC ever repaid (stroops)
     pub total_repaid: i128,
     pub default_count: u32,
-    /// Successful loans repaid
     pub loan_count: u32,
-    /// Ledger timestamp of profile creation
     pub created_at: u64,
     pub is_frozen: bool,
     pub freeze_reason: String,
 }
 
-/// Ledger storage keys.
 #[contracttype]
 pub enum DataKey {
     BorrowerProfile(Address),
     Admin,
-    /// Address of the LendingContract — allowed to call add_reputation_event
-    /// and update_loan_totals in addition to the admin.
+    /// LendingContract address — authorized to call reputation mutations.
     LendingContract,
 }
 
@@ -73,9 +70,9 @@ impl BorrowerReputationContract {
 
     /// One-time initialisation.
     ///
-    /// `lending_contract` — the deployed LendingContract address.
-    /// This address is allowed to mutate reputation state in addition to `admin`,
-    /// enabling fully on-chain reputation updates from repayment/default events.
+    /// `lending_contract` is the deployed LendingContract address.
+    /// It is stored and allowed to mutate reputation state alongside `admin`,
+    /// enabling fully on-chain trustless reputation updates from loan events.
     pub fn initialize(env: Env, admin: Address, lending_contract: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("Contract already initialised");
@@ -85,9 +82,11 @@ impl BorrowerReputationContract {
         env.storage()
             .instance()
             .set(&DataKey::LendingContract, &lending_contract);
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
     pub fn get_admin(env: Env) -> Address {
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         env.storage()
             .instance()
             .get(&DataKey::Admin)
@@ -123,6 +122,7 @@ impl BorrowerReputationContract {
             freeze_reason: String::from_str(&env, ""),
         };
         env.storage().persistent().set(&key, &profile);
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
     pub fn has_profile(env: Env, borrower: Address) -> bool {
@@ -132,21 +132,28 @@ impl BorrowerReputationContract {
     }
 
     pub fn get_profile(env: Env, borrower: Address) -> BorrowerProfile {
-        env.storage()
+        let key = DataKey::BorrowerProfile(borrower);
+        let profile: BorrowerProfile = env
+            .storage()
             .persistent()
-            .get(&DataKey::BorrowerProfile(borrower))
-            .expect("Profile not found")
+            .get(&key)
+            .expect("Profile not found");
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+        profile
     }
 
-    // ── Loan eligibility ──────────────────────────────────────────────────────
+    // ── Loan eligibility (read-only — called cross-contract from LendingContract) ──
 
-    /// Max loan in USDC stroops (1 USDC = 10_000_000 stroops).
+    /// Max loan in USDC stroops.
+    /// Called by LendingContract.create_loan_request() via cross-contract call
+    /// to enforce reputation-based limits entirely on-chain.
     pub fn calculate_max_loan(env: Env, borrower: Address) -> i128 {
         let profile = Self::get_profile(env, borrower);
         Self::tier_max_loan(&profile.reputation_tier)
     }
 
-    /// Interest rate in basis-points (1500 = 15.00 % APY).
+    /// Interest rate in basis-points.
+    /// Called by LendingContract.create_loan_request() via cross-contract call.
     pub fn calculate_interest_rate(env: Env, borrower: Address) -> u32 {
         let profile = Self::get_profile(env, borrower);
         Self::tier_interest_rate(&profile.reputation_tier)
@@ -156,12 +163,9 @@ impl BorrowerReputationContract {
 
     /// Apply a reputation event.
     ///
-    /// Caller must be either:
-    ///   - The `admin` address, OR
-    ///   - The `lending_contract` address (set at initialize).
-    ///
-    /// This makes on-chain reputation updates from LendingContract.record_payment()
-    /// and LendingContract.mark_defaulted() fully trustless — no admin key needed.
+    /// Caller must be admin OR the authorised lending_contract.
+    /// This is the key function called cross-contract from LendingContract
+    /// after loan repayment or default — no admin key required for those paths.
     pub fn add_reputation_event(
         env: Env,
         caller: Address,
@@ -177,6 +181,7 @@ impl BorrowerReputationContract {
             .persistent()
             .get(&key)
             .expect("Profile not found");
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
         if profile.is_frozen {
             panic!("Cannot modify frozen account");
@@ -195,9 +200,10 @@ impl BorrowerReputationContract {
         }
 
         env.storage().persistent().set(&key, &profile);
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    /// Update cumulative borrowed/repaid amounts (admin or lending contract).
+    /// Update cumulative borrowed/repaid totals (admin or lending contract).
     pub fn update_loan_totals(
         env: Env,
         caller: Address,
@@ -214,10 +220,13 @@ impl BorrowerReputationContract {
             .persistent()
             .get(&key)
             .expect("Profile not found");
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
         profile.total_borrowed += borrowed_delta;
         profile.total_repaid += repaid_delta;
+
         env.storage().persistent().set(&key, &profile);
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
     /// Freeze an account (admin only).
@@ -231,12 +240,15 @@ impl BorrowerReputationContract {
             .persistent()
             .get(&key)
             .expect("Profile not found");
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
         profile.is_frozen = true;
         profile.freeze_reason = reason;
         profile.reputation_score = 0;
         profile.reputation_tier = ReputationTier::None;
+
         env.storage().persistent().set(&key, &profile);
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
     /// Unfreeze an account (admin only).
@@ -250,19 +262,34 @@ impl BorrowerReputationContract {
             .persistent()
             .get(&key)
             .expect("Profile not found");
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
         profile.is_frozen = false;
         profile.freeze_reason = String::from_str(&env, "");
+
         env.storage().persistent().set(&key, &profile);
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
     pub fn is_frozen(env: Env, borrower: Address) -> bool {
         Self::get_profile(env, borrower).is_frozen
     }
 
+    // ── TTL heartbeat — called by backend cron every 48 h ─────────────────────
+
+    /// Extend TTL of a borrower profile.
+    /// Permissionless — no state change, just a rent extension.
+    /// Backend cron should call this for all profiles with active loans.
+    pub fn bump_profile_ttl(env: Env, borrower: Address) {
+        let key = DataKey::BorrowerProfile(borrower);
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+        }
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    /// Returns (points_delta, is_default_event, is_repaid_event).
     fn event_info(event: &ReputationEvent) -> (i32, bool, bool) {
         match event {
             ReputationEvent::TestLoanRepaid   => (50,   false, true),
@@ -276,41 +303,33 @@ impl BorrowerReputationContract {
     }
 
     fn score_to_tier(score: i128) -> ReputationTier {
-        if score < 50 {
-            ReputationTier::None
-        } else if score < 150 {
-            ReputationTier::Beginner
-        } else if score < 500 {
-            ReputationTier::Silver
-        } else if score < 1000 {
-            ReputationTier::Gold
-        } else {
-            ReputationTier::Platinum
-        }
+        if score < 50       { ReputationTier::None }
+        else if score < 150 { ReputationTier::Beginner }
+        else if score < 500 { ReputationTier::Silver }
+        else if score < 1000{ ReputationTier::Gold }
+        else                { ReputationTier::Platinum }
     }
 
     fn tier_max_loan(tier: &ReputationTier) -> i128 {
-        // 1 USDC = 10_000_000 stroops
         match tier {
-            ReputationTier::None     =>     100_0000000, //     100 USDC
-            ReputationTier::Beginner =>     500_0000000, //     500 USDC
-            ReputationTier::Silver   =>   2_000_0000000, //   2,000 USDC
-            ReputationTier::Gold     =>  10_000_0000000, //  10,000 USDC
-            ReputationTier::Platinum => 100_000_0000000, // 100,000 USDC
+            ReputationTier::None     =>      100_0000000, //     100 USDC
+            ReputationTier::Beginner =>      500_0000000, //     500 USDC
+            ReputationTier::Silver   =>    2_000_0000000, //   2,000 USDC
+            ReputationTier::Gold     =>   10_000_0000000, //  10,000 USDC
+            ReputationTier::Platinum =>  100_000_0000000, // 100,000 USDC
         }
     }
 
     fn tier_interest_rate(tier: &ReputationTier) -> u32 {
         match tier {
-            ReputationTier::None     => 1500, // 15.00 %
-            ReputationTier::Beginner => 1300, // 13.00 %
-            ReputationTier::Silver   => 1200, // 12.00 %
-            ReputationTier::Gold     => 1000, // 10.00 %
-            ReputationTier::Platinum =>  800, //  8.00 %
+            ReputationTier::None     => 1500,
+            ReputationTier::Beginner => 1300,
+            ReputationTier::Silver   => 1200,
+            ReputationTier::Gold     => 1000,
+            ReputationTier::Platinum =>  800,
         }
     }
 
-    /// Passes if caller is admin OR the authorised lending contract.
     fn assert_admin_or_lending(env: &Env, caller: &Address) {
         let admin: Address = env
             .storage()
