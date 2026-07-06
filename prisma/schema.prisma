@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum AppRole {
+  BORROWER
+  LENDER
+  ADMIN
+}
+
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum RiskStatus {
+  LOW
+  MEDIUM
+  HIGH
+  BLOCKED
+}
+
+enum LoanStatus {
+  REQUESTED
+  APPROVED
+  FUNDED
+  ACTIVE
+  REPAID
+  DEFAULTED
+  CANCELLED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model WalletProfile {
+  id              String      @id @default(uuid())
+  walletAddress   String      @unique @map("wallet_address")
+  role            AppRole     @default(BORROWER)
+  
+  // KYC & Onboarding
+  kycStatus       KycStatus   @default(PENDING) @map("kyc_status")
+  kycData         Json?       @map("kyc_data")
+  
+  // Reputation (mirrors on-chain state)
+  reputationScore Int         @default(0) @map("reputation_score")
+  reputationTier  String      @default("None") @map("reputation_tier")
+  riskStatus      RiskStatus  @default(MEDIUM) @map("risk_status")
+  
+  // Platform limits
+  maxLoanAmount   BigInt      @default(0) @map("max_loan_amount")
+  
+  // Aggregate stats
+  totalBorrowed   BigInt      @default(0) @map("total_borrowed")
+  totalRepaid     BigInt      @default(0) @map("total_repaid")
+  defaultCount    Int         @default(0) @map("default_count")
+  loanCount       Int         @default(0) @map("loan_count")
+  
+  isFrozen        Boolean     @default(false) @map("is_frozen")
+  freezeReason    String?     @map("freeze_reason")
+
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  borrowedLoans   Loan[]      @relation("BorrowerLoans")
+  fundedLoans     Loan[]      @relation("LenderLoans")
+  escrowHolds     EscrowHold[] @relation("LenderEscrowHolds")
+  escrowReceives  EscrowHold[] @relation("BorrowerEscrowHolds")
+
+  @@map("wallet_profiles")
+}
+
+model Loan {
+  id              String      @id @default(uuid())
+  loanId          Int         @unique @map("loan_id") // On-chain ID
+  
+  borrowerId      String      @map("borrower_id")
+  borrower        WalletProfile @relation("BorrowerLoans", fields: [borrowerId], references: [id])
+  
+  lenderId        String?     @map("lender_id")
+  lender          WalletProfile? @relation("LenderLoans", fields: [lenderId], references: [id])
+
+  amount          BigInt
+  durationDays    Int         @map("duration_days")
+  interestRateBps Int         @map("interest_rate_bps")
+  totalDue        BigInt      @map("total_due")
+  remainingDue    BigInt      @map("remaining_due")
+  
+  status          LoanStatus  @default(REQUESTED)
+  
+  dueAt           DateTime?   @map("due_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  escrowHolds     EscrowHold[]
+  payments        Payment[]
+
+  @@map("loans")
+}
+
+model EscrowHold {
+  id              String      @id @default(uuid())
+  escrowId        Int         @unique @map("escrow_id") // On-chain ID
+  
+  loanId          String      @map("loan_id")
+  loan            Loan        @relation(fields: [loanId], references: [id])
+  
+  lenderId        String      @map("lender_id")
+  lender          WalletProfile @relation("LenderEscrowHolds", fields: [lenderId], references: [id])
+  
+  borrowerId      String      @map("borrower_id")
+  borrower        WalletProfile @relation("BorrowerEscrowHolds", fields: [borrowerId], references: [id])
+  
+  amount          BigInt
+  status          String      // Held, Transferred, Revoked
+  
+  expiresAt       DateTime    @map("expires_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  @@map("escrow_holds")
+}
+
+model Payment {
+  id              String      @id @default(uuid())
+  
+  loanId          String      @map("loan_id")
+  loan            Loan        @relation(fields: [loanId], references: [id])
+  
+  amount          BigInt
+  paidAt          DateTime    @default(now()) @map("paid_at")
+
+  @@map("payments")
+}
+
+model InsurancePool {
+  id              String      @id @default(uuid())
+  balance         BigInt      @default(0)
+  lastUpdated     DateTime    @updatedAt @map("last_updated")
+
+  @@map("insurance_pool")
+}
+
+model InsuranceEvent {
+  id              String      @id @default(uuid())
+  eventId         Int         @unique @map("event_id") // On-chain ID
+  
+  loanId          Int         @map("loan_id")
+  lenderAddress   String      @map("lender_address")
+  amountPaid      BigInt      @map("amount_paid")
+  paidAt          DateTime    @default(now()) @map("paid_at")
+
+  @@map("insurance_events")
+}
+
+model AuthChallenge {
+  id            String   @id @default(uuid())
+  walletAddress String   @unique @map("wallet_address")
+  nonce         String
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("auth_challenges")
+}
