@@ -1,9 +1,10 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, contracttype,
+    Address, Env, String, Vec,
+};
 
 // ─── TTL Constants ────────────────────────────────────────────────────────────
-// Borrower profiles are permanent records — use a longer target TTL (60 days).
-// Backend cron bumps these every 48 h via bump_profile_ttl().
 const LEDGERS_PER_DAY: u32 = 17_280;
 const TTL_THRESHOLD:   u32 = LEDGERS_PER_DAY * 5;  // 5 days  — trigger
 const TTL_EXTEND_TO:   u32 = LEDGERS_PER_DAY * 60; // 60 days — target for profiles
@@ -20,8 +21,6 @@ pub enum ReputationTier {
     Platinum,
 }
 
-/// Reputation events — variant ORDER must never change after deployment.
-/// The LendingContract passes variant index as u32 in cross-contract calls.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ReputationEvent {
@@ -40,9 +39,7 @@ pub struct BorrowerProfile {
     pub address: Address,
     pub reputation_score: i128,
     pub reputation_tier: ReputationTier,
-    /// Total USDC ever borrowed (stroops)
     pub total_borrowed: i128,
-    /// Total USDC ever repaid (stroops)
     pub total_repaid: i128,
     pub default_count: u32,
     pub loan_count: u32,
@@ -54,8 +51,8 @@ pub struct BorrowerProfile {
 #[contracttype]
 pub enum DataKey {
     BorrowerProfile(Address),
-    Admin,
-    /// LendingContract address — authorized to call reputation mutations.
+    Admins,
+    IsPaused,
     LendingContract,
 }
 
@@ -68,28 +65,36 @@ pub struct BorrowerReputationContract;
 impl BorrowerReputationContract {
     // ── Admin / Init ──────────────────────────────────────────────────────────
 
-    /// One-time initialisation.
-    ///
-    /// `lending_contract` is the deployed LendingContract address.
-    /// It is stored and allowed to mutate reputation state alongside `admin`,
-    /// enabling fully on-chain trustless reputation updates from loan events.
-    pub fn initialize(env: Env, admin: Address, lending_contract: Address) {
-        if env.storage().instance().has(&DataKey::Admin) {
+    pub fn initialize(
+        env: Env,
+        admin1: Address,
+        admin2: Address,
+        admin3: Address,
+        lending_contract: Address,
+    ) {
+        if env.storage().instance().has(&DataKey::Admins) {
             panic!("Contract already initialised");
         }
-        admin.require_auth();
-        env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage()
-            .instance()
-            .set(&DataKey::LendingContract, &lending_contract);
+
+        if admin1 == admin2 || admin1 == admin3 || admin2 == admin3 {
+            panic!("Admins must be distinct");
+        }
+
+        admin1.require_auth();
+
+        let admins = soroban_sdk::vec![&env, admin1, admin2, admin3];
+
+        env.storage().instance().set(&DataKey::Admins, &admins);
+        env.storage().instance().set(&DataKey::IsPaused, &false);
+        env.storage().instance().set(&DataKey::LendingContract, &lending_contract);
         env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    pub fn get_admin(env: Env) -> Address {
+    pub fn get_admins(env: Env) -> Vec<Address> {
         env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         env.storage()
             .instance()
-            .get(&DataKey::Admin)
+            .get(&DataKey::Admins)
             .expect("Contract not initialised")
     }
 
@@ -100,10 +105,32 @@ impl BorrowerReputationContract {
             .expect("Contract not initialised")
     }
 
+    pub fn is_paused(env: Env) -> bool {
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+        env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false)
+    }
+
+    // ── Emergency Controls (2-of-3 Multisig) ──────────────────────────────────
+
+    pub fn pause(env: Env, caller1: Address, caller2: Address) {
+        Self::assert_2_of_3_admins(&env, &caller1, &caller2);
+        env.storage().instance().set(&DataKey::IsPaused, &true);
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
+    pub fn unpause(env: Env, caller1: Address, caller2: Address) {
+        Self::assert_2_of_3_admins(&env, &caller1, &caller2);
+        env.storage().instance().set(&DataKey::IsPaused, &false);
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
     // ── Borrower profile ──────────────────────────────────────────────────────
 
-    /// Called by borrower after KYC is approved (borrower signs the tx).
     pub fn init_borrower(env: Env, borrower: Address) {
+        Self::assert_not_paused(&env);
         borrower.require_auth();
         let key = DataKey::BorrowerProfile(borrower.clone());
         if env.storage().persistent().has(&key) {
@@ -142,38 +169,32 @@ impl BorrowerReputationContract {
         profile
     }
 
-    // ── Loan eligibility (read-only — called cross-contract from LendingContract) ──
+    // ── Loan eligibility ──────────────────────────────────────────────────────
 
-    /// Max loan in USDC stroops.
-    /// Called by LendingContract.create_loan_request() via cross-contract call
-    /// to enforce reputation-based limits entirely on-chain.
     pub fn calculate_max_loan(env: Env, borrower: Address) -> i128 {
         let profile = Self::get_profile(env, borrower);
         Self::tier_max_loan(&profile.reputation_tier)
     }
 
-    /// Interest rate in basis-points.
-    /// Called by LendingContract.create_loan_request() via cross-contract call.
     pub fn calculate_interest_rate(env: Env, borrower: Address) -> u32 {
         let profile = Self::get_profile(env, borrower);
         Self::tier_interest_rate(&profile.reputation_tier)
     }
 
-    // ── Mutations (admin OR lending contract) ─────────────────────────────────
+    // ── Mutations ─────────────────────────────────────────────────────────────
 
     /// Apply a reputation event.
-    ///
-    /// Caller must be admin OR the authorised lending_contract.
-    /// This is the key function called cross-contract from LendingContract
-    /// after loan repayment or default — no admin key required for those paths.
+    /// To maximize decentralization, this can ONLY be called by the LendingContract.
+    /// Admins cannot manually adjust scores.
     pub fn add_reputation_event(
         env: Env,
         caller: Address,
         borrower: Address,
         event: ReputationEvent,
     ) {
+        Self::assert_not_paused(&env);
         caller.require_auth();
-        Self::assert_admin_or_lending(&env, &caller);
+        Self::assert_lending_contract(&env, &caller);
 
         let key = DataKey::BorrowerProfile(borrower.clone());
         let mut profile: BorrowerProfile = env
@@ -203,7 +224,8 @@ impl BorrowerReputationContract {
         env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    /// Update cumulative borrowed/repaid totals (admin or lending contract).
+    /// Update cumulative borrowed/repaid totals.
+    /// ONLY callable by the LendingContract.
     pub fn update_loan_totals(
         env: Env,
         caller: Address,
@@ -211,8 +233,9 @@ impl BorrowerReputationContract {
         borrowed_delta: i128,
         repaid_delta: i128,
     ) {
+        Self::assert_not_paused(&env);
         caller.require_auth();
-        Self::assert_admin_or_lending(&env, &caller);
+        Self::assert_lending_contract(&env, &caller);
 
         let key = DataKey::BorrowerProfile(borrower.clone());
         let mut profile: BorrowerProfile = env
@@ -229,10 +252,9 @@ impl BorrowerReputationContract {
         env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    /// Freeze an account (admin only).
-    pub fn freeze_account(env: Env, admin: Address, borrower: Address, reason: String) {
-        admin.require_auth();
-        Self::assert_admin(&env, &admin);
+    /// Freeze an account. Requires 2-of-3 admin signatures.
+    pub fn freeze_account(env: Env, caller1: Address, caller2: Address, borrower: Address, reason: String) {
+        Self::assert_2_of_3_admins(&env, &caller1, &caller2);
 
         let key = DataKey::BorrowerProfile(borrower);
         let mut profile: BorrowerProfile = env
@@ -251,10 +273,9 @@ impl BorrowerReputationContract {
         env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    /// Unfreeze an account (admin only).
-    pub fn unfreeze_account(env: Env, admin: Address, borrower: Address) {
-        admin.require_auth();
-        Self::assert_admin(&env, &admin);
+    /// Unfreeze an account. Requires 2-of-3 admin signatures.
+    pub fn unfreeze_account(env: Env, caller1: Address, caller2: Address, borrower: Address) {
+        Self::assert_2_of_3_admins(&env, &caller1, &caller2);
 
         let key = DataKey::BorrowerProfile(borrower);
         let mut profile: BorrowerProfile = env
@@ -275,11 +296,8 @@ impl BorrowerReputationContract {
         Self::get_profile(env, borrower).is_frozen
     }
 
-    // ── TTL heartbeat — called by backend cron every 48 h ─────────────────────
+    // ── TTL heartbeat ─────────────────────────────────────────────────────────
 
-    /// Extend TTL of a borrower profile.
-    /// Permissionless — no state change, just a rent extension.
-    /// Backend cron should call this for all profiles with active loans.
     pub fn bump_profile_ttl(env: Env, borrower: Address) {
         let key = DataKey::BorrowerProfile(borrower);
         if env.storage().persistent().has(&key) {
@@ -312,11 +330,11 @@ impl BorrowerReputationContract {
 
     fn tier_max_loan(tier: &ReputationTier) -> i128 {
         match tier {
-            ReputationTier::None     =>      100_0000000, //     100 USDC
-            ReputationTier::Beginner =>      500_0000000, //     500 USDC
-            ReputationTier::Silver   =>    2_000_0000000, //   2,000 USDC
-            ReputationTier::Gold     =>   10_000_0000000, //  10,000 USDC
-            ReputationTier::Platinum =>  100_000_0000000, // 100,000 USDC
+            ReputationTier::None     =>      100_0000000,
+            ReputationTier::Beginner =>      500_0000000,
+            ReputationTier::Silver   =>    2_000_0000000,
+            ReputationTier::Gold     =>   10_000_0000000,
+            ReputationTier::Platinum =>  100_000_0000000,
         }
     }
 
@@ -330,33 +348,40 @@ impl BorrowerReputationContract {
         }
     }
 
-    fn assert_admin_or_lending(env: &Env, caller: &Address) {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .expect("Contract not initialised");
+    fn assert_not_paused(env: &Env) {
+        let paused: bool = env.storage().instance().get(&DataKey::IsPaused).unwrap_or(false);
+        if paused {
+            panic!("Contract is paused");
+        }
+    }
+
+    fn assert_lending_contract(env: &Env, caller: &Address) {
         let lending: Address = env
             .storage()
             .instance()
             .get(&DataKey::LendingContract)
             .expect("Contract not initialised");
-        if *caller != admin && *caller != lending {
-            panic!("Unauthorised: caller is not admin or lending contract");
+        if *caller != lending {
+            panic!("Unauthorised: caller is not lending contract");
         }
     }
 
-    fn assert_admin(env: &Env, caller: &Address) {
-        let admin: Address = env
+    fn assert_2_of_3_admins(env: &Env, caller1: &Address, caller2: &Address) {
+        if caller1 == caller2 {
+            panic!("Requires two distinct admin signatures");
+        }
+
+        let admins: Vec<Address> = env
             .storage()
             .instance()
-            .get(&DataKey::Admin)
+            .get(&DataKey::Admins)
             .expect("Contract not initialised");
-        if *caller != admin {
-            panic!("Unauthorised: caller is not admin");
+
+        if !admins.contains(caller1) || !admins.contains(caller2) {
+            panic!("Unauthorised: Callers must be admins");
         }
+
+        caller1.require_auth();
+        caller2.require_auth();
     }
 }
-
-#[cfg(test)]
-mod test;

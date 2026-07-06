@@ -20,10 +20,6 @@ pub enum EscrowStatus {
     Revoked,
 }
 
-/// A single escrow commitment.
-///
-/// Physical USDC is held by this contract via `token.transfer(lender → contract)`.
-/// The `token` field is always the verified USDC address stored at init.
 #[contracttype]
 #[derive(Clone)]
 pub struct EscrowHold {
@@ -31,13 +27,10 @@ pub struct EscrowHold {
     pub loan_id: u32,
     pub lender: Address,
     pub borrower: Address,
-    /// Amount in USDC stroops
     pub amount: i128,
     pub held_at: u64,
-    /// held_at + 180 — end of the 3-minute revocation window
     pub expires_at: u64,
     pub status: EscrowStatus,
-    /// Token address — always equals UsdcToken stored at init.
     pub token: Address,
 }
 
@@ -45,7 +38,10 @@ pub struct EscrowHold {
 pub enum DataKey {
     Hold(u32),
     EscrowCount,
-    Admin,
+    /// Stores the array of 3 admin addresses
+    Admins,
+    /// Boolean flag for emergency pause
+    IsPaused,
     UsdcToken,
 }
 
@@ -56,39 +52,72 @@ pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
-    pub fn initialize(env: Env, admin: Address, usdc_token: Address) {
-        if env.storage().instance().has(&DataKey::Admin) {
+    // ── Admin / Init ──────────────────────────────────────────────────────────
+
+    /// One-time initialisation with 3 admin addresses.
+    pub fn initialize(env: Env, admin1: Address, admin2: Address, admin3: Address, usdc_token: Address) {
+        if env.storage().instance().has(&DataKey::Admins) {
             panic!("Contract already initialised");
         }
-        admin.require_auth();
-        env.storage().instance().set(&DataKey::Admin, &admin);
+        
+        // Ensure all admins are distinct
+        if admin1 == admin2 || admin1 == admin3 || admin2 == admin3 {
+            panic!("Admins must be distinct");
+        }
+
+        admin1.require_auth(); // At least one admin must authorize the init
+        
+        let admins = soroban_sdk::vec![&env, admin1, admin2, admin3];
+        
+        env.storage().instance().set(&DataKey::Admins, &admins);
+        env.storage().instance().set(&DataKey::IsPaused, &false);
         env.storage().instance().set(&DataKey::UsdcToken, &usdc_token);
         env.storage().instance().set(&DataKey::EscrowCount, &0u32);
         env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    pub fn get_admin(env: Env) -> Address {
+    pub fn get_admins(env: Env) -> soroban_sdk::Vec<Address> {
         env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         env.storage()
             .instance()
-            .get(&DataKey::Admin)
+            .get(&DataKey::Admins)
             .expect("Contract not initialised")
     }
 
     pub fn get_usdc_token(env: Env) -> Address {
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         env.storage()
             .instance()
             .get(&DataKey::UsdcToken)
             .expect("Contract not initialised")
     }
+    
+    pub fn is_paused(env: Env) -> bool {
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+        env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false)
+    }
+
+    // ── Emergency Controls (2-of-3 Multisig) ──────────────────────────────────
+
+    /// Pause the contract. Requires 2 distinct admin signatures.
+    pub fn pause(env: Env, caller1: Address, caller2: Address) {
+        Self::assert_2_of_3_admins(&env, &caller1, &caller2);
+        env.storage().instance().set(&DataKey::IsPaused, &true);
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
+    /// Unpause the contract. Requires 2 distinct admin signatures.
+    pub fn unpause(env: Env, caller1: Address, caller2: Address) {
+        Self::assert_2_of_3_admins(&env, &caller1, &caller2);
+        env.storage().instance().set(&DataKey::IsPaused, &false);
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
 
     // ── Holds ─────────────────────────────────────────────────────────────────
 
-    /// Lender commits USDC into contract custody atomically.
-    ///
-    /// Step 1 — `token.transfer(lender → contract)` FIRST.
-    /// Step 2 — State persisted + TTL bumped after successful transfer.
-    /// Step 3 — `HOLD_CRE` event emitted.
     pub fn create_hold(
         env: Env,
         lender: Address,
@@ -96,6 +125,7 @@ impl EscrowContract {
         loan_id: u32,
         amount: i128,
     ) -> u32 {
+        Self::assert_not_paused(&env);
         lender.require_auth();
 
         if amount <= 0 {
@@ -108,11 +138,9 @@ impl EscrowContract {
             .get(&DataKey::UsdcToken)
             .expect("Contract not initialised");
 
-        // ── Step 1: Move USDC from lender into contract custody FIRST ─────────
         let token = TokenClient::new(&env, &usdc_token);
         token.transfer(&lender, &env.current_contract_address(), &amount);
 
-        // Step 2: Write state only after successful transfer.
         let count: u32 = env
             .storage()
             .instance()
@@ -140,7 +168,6 @@ impl EscrowContract {
         env.storage().instance().set(&DataKey::EscrowCount, &new_id);
         env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        // Step 3: Emit event.
         env.events().publish(
             (symbol_short!("HOLD_CRE"), new_id),
             (hold.loan_id, hold.amount),
@@ -149,12 +176,8 @@ impl EscrowContract {
         new_id
     }
 
-    /// Lender revokes within the 3-minute window — USDC returned atomically.
-    ///
-    /// Step 1 — `token.transfer(contract → lender)` FIRST.
-    /// Step 2 — State set to Revoked + TTL bumped.
-    /// Step 3 — `HOLD_REV` event emitted.
     pub fn revoke_hold(env: Env, lender: Address, escrow_id: u32) {
+        // We do NOT check assert_not_paused here so lenders can always rescue funds even if paused.
         lender.require_auth();
 
         let hold_key = DataKey::Hold(escrow_id);
@@ -175,30 +198,21 @@ impl EscrowContract {
             panic!("Revocation window has expired");
         }
 
-        // ── Step 1: Return USDC to lender FIRST ──────────────────────────────
         let token = TokenClient::new(&env, &hold.token);
         token.transfer(&env.current_contract_address(), &lender, &hold.amount);
 
-        // Step 2: Mark revoked only after successful refund.
         hold.status = EscrowStatus::Revoked;
         env.storage().persistent().set(&hold_key, &hold);
         env.storage().persistent().extend_ttl(&hold_key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        // Step 3: Emit event.
         env.events().publish(
             (symbol_short!("HOLD_REV"), escrow_id),
             (hold.loan_id, hold.amount),
         );
     }
 
-    /// Disburse held USDC to the borrower once the revocation window has closed.
-    ///
-    /// PERMISSIONLESS — any address can call after `expires_at`.
-    ///
-    /// Step 1 — `token.transfer(contract → borrower)` FIRST.
-    /// Step 2 — State set to Transferred + TTL bumped.
-    /// Step 3 — `HOLD_DIS` event emitted (backend then calls `lending.activate_loan`).
     pub fn confirm_disbursement(env: Env, caller: Address, escrow_id: u32) {
+        Self::assert_not_paused(&env);
         caller.require_auth();
 
         let hold_key = DataKey::Hold(escrow_id);
@@ -213,29 +227,24 @@ impl EscrowContract {
             panic!("Hold is not in HELD state");
         }
         if env.ledger().timestamp() < hold.expires_at {
-            panic!("Revocation window has not closed yet — lender can still revoke");
+            panic!("Revocation window has not closed yet");
         }
 
-        // ── Step 1: Transfer USDC to borrower FIRST ───────────────────────────
         let token = TokenClient::new(&env, &hold.token);
         token.transfer(&env.current_contract_address(), &hold.borrower, &hold.amount);
 
-        // Step 2: Mark transferred only after successful disbursement.
         hold.status = EscrowStatus::Transferred;
         env.storage().persistent().set(&hold_key, &hold);
         env.storage().persistent().extend_ttl(&hold_key, TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        // Step 3: Emit event.
         env.events().publish(
             (symbol_short!("HOLD_DIS"), escrow_id),
             (hold.loan_id, hold.borrower.clone(), hold.amount),
         );
     }
 
-    // ── TTL heartbeat — called by backend cron every 48 h ─────────────────────
+    // ── TTL heartbeat ─────────────────────────────────────────────────────────
 
-    /// Extend TTL of a single escrow hold.
-    /// Permissionless — no state change, just a rent extension.
     pub fn bump_hold_ttl(env: Env, escrow_id: u32) {
         let hold_key = DataKey::Hold(escrow_id);
         if env.storage().persistent().has(&hold_key) {
@@ -263,9 +272,39 @@ impl EscrowContract {
     }
 
     pub fn get_escrow_count(env: Env) -> u32 {
+        env.storage().instance().extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         env.storage()
             .instance()
             .get(&DataKey::EscrowCount)
             .unwrap_or(0)
+    }
+
+    // ── Private Helpers ───────────────────────────────────────────────────────
+
+    fn assert_not_paused(env: &Env) {
+        let paused: bool = env.storage().instance().get(&DataKey::IsPaused).unwrap_or(false);
+        if paused {
+            panic!("Contract is paused");
+        }
+    }
+
+    fn assert_2_of_3_admins(env: &Env, caller1: &Address, caller2: &Address) {
+        if caller1 == caller2 {
+            panic!("Requires two distinct admin signatures");
+        }
+
+        let admins: soroban_sdk::Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admins)
+            .expect("Contract not initialised");
+
+        if !admins.contains(caller1) || !admins.contains(caller2) {
+            panic!("Unauthorised: Callers must be admins");
+        }
+
+        // Both must sign the transaction
+        caller1.require_auth();
+        caller2.require_auth();
     }
 }
