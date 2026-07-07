@@ -43,7 +43,7 @@ export function HeroSection({ content, isAuthenticated = false }: HeroSectionPro
             >
               {isAuthenticated ? "Go to Dashboard →" : "Get started free →"}
             </a>
-            <a href="#p2p" style={{ fontSize: "0.9rem", color: "var(--text-secondary)", fontWeight: 500 }}>
+            <a href="/how-it-works" className="btn btn-outline" style={{ padding: "0.85rem 2rem", fontSize: "1rem" }}>
               See how it works
             </a>
           </div>

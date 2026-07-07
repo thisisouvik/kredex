@@ -28,7 +28,7 @@ export function TestimonialsSection({ items }: TestimonialsSectionProps) {
                 </div>
               </div>
               <p className="text-secondary" style={{ fontStyle: "italic", lineHeight: 1.7 }}>
-                "{item.review}"
+                &quot;{item.review}&quot;
               </p>
             </article>
           ))}
