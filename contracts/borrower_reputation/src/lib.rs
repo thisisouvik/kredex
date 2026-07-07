@@ -423,3 +423,231 @@ impl BorrowerReputationContract {
         caller2.require_auth();
     }
 }
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::{testutils::Address as _, Env};
+
+    fn setup() -> (Env, BorrowerReputationContractClient<'static>, Address, Address, Address, Address, Address) {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(BorrowerReputationContract, ());
+        let client = BorrowerReputationContractClient::new(&env, &contract_id);
+
+        let admin1  = Address::generate(&env);
+        let admin2  = Address::generate(&env);
+        let admin3  = Address::generate(&env);
+        let lending = Address::generate(&env);
+        let borrower = Address::generate(&env);
+
+        client.initialize(&admin1, &admin2, &admin3, &lending);
+
+        (env, client, admin1, admin2, admin3, lending, borrower)
+    }
+
+    // ── Day 24: Full loan lifecycle ───────────────────────────────────────────
+
+    #[test]
+    fn test_init_borrower_and_profile() {
+        let (_, client, _, _, _, _, borrower) = setup();
+        assert!(!client.has_profile(&borrower));
+        client.init_borrower(&borrower);
+        assert!(client.has_profile(&borrower));
+
+        let profile = client.get_profile(&borrower);
+        assert_eq!(profile.reputation_score, 0);
+        assert_eq!(profile.reputation_tier, ReputationTier::None);
+        assert!(!profile.is_frozen);
+        assert_eq!(profile.loan_count, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Profile already exists")]
+    fn test_init_borrower_duplicate_panics() {
+        let (_, client, _, _, _, _, borrower) = setup();
+        client.init_borrower(&borrower);
+        client.init_borrower(&borrower); // should panic
+    }
+
+    #[test]
+    fn test_reputation_events_on_time_repayment() {
+        let (_, client, _, _, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        // Loan repaid on time = +20 pts
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+        let profile = client.get_profile(&borrower);
+        assert_eq!(profile.reputation_score, 20);
+        assert_eq!(profile.loan_count, 1);
+    }
+
+    #[test]
+    fn test_reputation_tier_progression() {
+        let (_, client, _, _, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        // Reach Beginner (50 pts) via test loan +50
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::TestLoanRepaid);
+        let p = client.get_profile(&borrower);
+        assert_eq!(p.reputation_tier, ReputationTier::Beginner);
+
+        // +20 x 5 to reach Silver (150 pts total: 50 + 100)
+        for _ in 0..5 {
+            client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+        }
+        let p = client.get_profile(&borrower);
+        assert_eq!(p.reputation_score, 150); // 50 + 5*20
+        assert_eq!(p.reputation_tier, ReputationTier::Silver);
+
+        // +20 x 18 more to reach Gold (150 + 360 = 510 >= 500 threshold)
+        for _ in 0..18 {
+            client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+        }
+        let p = client.get_profile(&borrower);
+        assert!(p.reputation_score >= 500, "Expected Gold score >=500, got {}", p.reputation_score);
+        assert_eq!(p.reputation_tier, ReputationTier::Gold);
+    }
+
+    #[test]
+    fn test_score_cannot_go_below_zero() {
+        let (_, client, _, _, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        // Default gives -100; score should floor at 0
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanDefaulted);
+        let p = client.get_profile(&borrower);
+        assert_eq!(p.reputation_score, 0); // clamped to 0
+        assert_eq!(p.default_count, 1);
+    }
+
+    // ── Edge case: Default trigger ────────────────────────────────────────────
+
+    #[test]
+    fn test_default_increments_counter() {
+        let (_, client, _, _, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        // Give some score first
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+        assert_eq!(client.get_profile(&borrower).default_count, 0);
+
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanDefaulted);
+        let p = client.get_profile(&borrower);
+        assert_eq!(p.default_count, 1);
+        assert_eq!(p.reputation_score, 0); // 40 - 100 = 0 (clamped)
+    }
+
+    #[test]
+    fn test_late_payment_deducts_score() {
+        let (_, client, _, _, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        // Give 100 pts first
+        for _ in 0..5 {
+            client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+        }
+        let before = client.get_profile(&borrower).reputation_score;
+
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanLate7Days);
+        let after = client.get_profile(&borrower).reputation_score;
+
+        assert_eq!(before - after, 50); // LoanLate7Days = -50
+    }
+
+    // ── Edge case: Escrow revoke → freeze ─────────────────────────────────────
+
+    #[test]
+    fn test_freeze_and_unfreeze_account() {
+        let (_, client, admin1, admin2, _, _, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        assert!(!client.is_frozen(&borrower));
+
+        let reason = soroban_sdk::String::from_str(&Env::default(), "Fraud suspected");
+        // Note: we need env to build the string — simplified test
+        client.freeze_account(&admin1, &admin2, &borrower, &soroban_sdk::String::from_str(
+            &client.env, "Fraud suspected"
+        ));
+        assert!(client.is_frozen(&borrower));
+
+        client.unfreeze_account(&admin1, &admin2, &borrower);
+        assert!(!client.is_frozen(&borrower));
+    }
+
+    #[test]
+    #[should_panic(expected = "Requires two distinct admin signatures")]
+    fn test_freeze_requires_distinct_admins() {
+        let (_, client, admin1, _, _, _, borrower) = setup();
+        client.init_borrower(&borrower);
+        let reason = soroban_sdk::String::from_str(&client.env, "test");
+        client.freeze_account(&admin1, &admin1, &borrower, &reason); // same admin twice
+    }
+
+    // ── Edge case: pause/unpause ──────────────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "Contract is paused")]
+    fn test_paused_contract_rejects_events() {
+        let (_, client, admin1, admin2, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+        client.pause(&admin1, &admin2);
+        // Should panic because paused
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+    }
+
+    #[test]
+    fn test_unpause_resumes_events() {
+        let (_, client, admin1, admin2, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+        client.pause(&admin1, &admin2);
+        client.unpause(&admin1, &admin2);
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::LoanRepaidOnTime);
+        let p = client.get_profile(&borrower);
+        assert_eq!(p.reputation_score, 20);
+    }
+
+    // ── Edge case: non-lending caller rejected ────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "Unauthorised: caller is not lending contract")]
+    fn test_random_address_cannot_add_event() {
+        let (env, client, _, _, _, _, borrower) = setup();
+        client.init_borrower(&borrower);
+        let attacker = Address::generate(&env);
+        client.add_reputation_event(&attacker, &borrower, &ReputationEvent::LoanRepaidOnTime);
+    }
+
+    // ── Loan eligibility ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_interest_rate_decreases_with_tier() {
+        let (_, client, _, _, _, lending, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        let rate_none = client.calculate_interest_rate(&borrower);
+        assert_eq!(rate_none, 1500); // None tier = 15%
+
+        // Advance to Beginner
+        client.add_reputation_event(&lending, &borrower, &ReputationEvent::TestLoanRepaid);
+        let rate_beginner = client.calculate_interest_rate(&borrower);
+        assert_eq!(rate_beginner, 1300); // Beginner = 13%
+    }
+
+    // ── KYC tier ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_kyc_tier_set_and_get() {
+        let (_, client, admin1, admin2, _, _, borrower) = setup();
+        client.init_borrower(&borrower);
+
+        assert_eq!(client.get_kyc_tier(&borrower), 0);
+        client.set_kyc_tier(&admin1, &admin2, &borrower, &2); // Full KYC
+        assert_eq!(client.get_kyc_tier(&borrower), 2);
+    }
+}
+
