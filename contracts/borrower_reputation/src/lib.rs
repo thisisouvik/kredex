@@ -51,6 +51,7 @@ pub struct BorrowerProfile {
 #[contracttype]
 pub enum DataKey {
     BorrowerProfile(Address),
+    KycTier(Address),        // 0=None, 1=Soft($500), 2=Full($5000)
     Admins,
     IsPaused,
     LendingContract,
@@ -172,8 +173,11 @@ impl BorrowerReputationContract {
     // ── Loan eligibility ──────────────────────────────────────────────────────
 
     pub fn calculate_max_loan(env: Env, borrower: Address) -> i128 {
-        let profile = Self::get_profile(env, borrower);
-        Self::tier_max_loan(&profile.reputation_tier)
+        let profile = Self::get_profile(env.clone(), borrower.clone());
+        let rep_limit = Self::tier_max_loan(&profile.reputation_tier);
+        let kyc_limit = Self::kyc_tier_max_loan(env, borrower);
+        // Enforce the MORE restrictive of the two limits
+        rep_limit.min(kyc_limit)
     }
 
     pub fn calculate_interest_rate(env: Env, borrower: Address) -> u32 {
@@ -296,6 +300,28 @@ impl BorrowerReputationContract {
         Self::get_profile(env, borrower).is_frozen
     }
 
+    /// Get the KYC tier for a borrower (0=None, 1=Soft, 2=Full).
+    pub fn get_kyc_tier(env: Env, borrower: Address) -> u32 {
+        let key = DataKey::KycTier(borrower);
+        let tier: u32 = env.storage().persistent().get(&key).unwrap_or(0);
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+        }
+        tier
+    }
+
+    /// Set KYC tier. Requires 2-of-3 admin signatures.
+    /// tier: 0=None, 1=Soft ($500), 2=Full ($5000)
+    pub fn set_kyc_tier(env: Env, caller1: Address, caller2: Address, borrower: Address, tier: u32) {
+        Self::assert_2_of_3_admins(&env, &caller1, &caller2);
+        if tier > 2 {
+            panic!("Invalid KYC tier — max is 2");
+        }
+        let key = DataKey::KycTier(borrower);
+        env.storage().persistent().set(&key, &tier);
+        env.storage().persistent().extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
     // ── TTL heartbeat ─────────────────────────────────────────────────────────
 
     pub fn bump_profile_ttl(env: Env, borrower: Address) {
@@ -335,6 +361,18 @@ impl BorrowerReputationContract {
             ReputationTier::Silver   =>    2_000_0000000,
             ReputationTier::Gold     =>   10_000_0000000,
             ReputationTier::Platinum =>  100_000_0000000,
+        }
+    }
+
+    /// KYC-tier based max loan in USDC stroops (7 decimals).
+    /// 0=None → $50   | 1=Soft → $500  | 2=Full → $5,000
+    fn kyc_tier_max_loan(env: Env, borrower: Address) -> i128 {
+        let key = DataKey::KycTier(borrower);
+        let tier: u32 = env.storage().persistent().get(&key).unwrap_or(0);
+        match tier {
+            0 =>       50_0000000,  // $50
+            1 =>      500_0000000,  // $500
+            _ =>    5_000_0000000,  // $5,000 (tier 2+)
         }
     }
 
