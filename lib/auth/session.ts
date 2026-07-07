@@ -36,6 +36,25 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
   }
 }
 
+export async function getAuthenticatedUser() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("Kredex_session")?.value;
+
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; wallet: string };
+    return {
+      user: {
+        id: decoded.sub,
+        wallet: decoded.wallet,
+      }
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
 export async function requireTradeVaultAdmin() {
   return await requireAuthenticatedUser();
 }

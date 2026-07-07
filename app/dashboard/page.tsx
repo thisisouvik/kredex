@@ -194,7 +194,7 @@ export default async function UnifiedDashboardPage() {
       </div>
 
       {/* Info strip */}
-      <div style={{
+      <div className="info-strip" style={{
         maxWidth: 860, margin: "0 auto 3rem", padding: "0 2rem",
         display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem",
       }}>

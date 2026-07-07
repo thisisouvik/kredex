@@ -25,74 +25,8 @@ export default async function LenderMarketplacePage() {
         .limit(20)
     : { data: [] };
 
-  const openLoansRes = srClient
-    ? await srClient.rpc("get_marketplace_loans")
-    : { data: null, error: null };
-
-  type MarketplaceLoanRow = {
-    id: string;
-    principal_amount: number;
-    apr_bps: number;
-    duration_days: number;
-    borrower_id: string;
-    borrower_name: string;
-    borrower_wallet: string;
-    trust_score: number;
-  };
-
-  let openLoans: MarketplaceLoanRow[] = [];
-
-  if (!openLoansRes.error) {
-    openLoans = (openLoansRes.data ?? []) as MarketplaceLoanRow[];
-  } else if (srClient) {
-    // Fallback path for environments where the RPC migration is not applied yet.
-    const fallbackLoansRes = await srClient
-      .from("loans")
-      .select("id, principal_amount, apr_bps, duration_days, borrower_id")
-      .in("status", ["requested", "approved"])
-      .order("created_at", { ascending: true });
-
-    const fallbackLoans = fallbackLoansRes.data ?? [];
-    const borrowerIds = Array.from(new Set(fallbackLoans.map((l) => String(l.borrower_id))));
-
-    const [profilesRes, snapshotsRes] = borrowerIds.length > 0
-      ? await Promise.all([
-          srClient
-            .from("profiles")
-            .select("id, full_name, wallet_address")
-            .in("id", borrowerIds),
-          srClient
-            .from("reputation_snapshots")
-            .select("user_id, score_total")
-            .in("user_id", borrowerIds),
-        ])
-      : [{ data: [] }, { data: [] }];
-
-    const profileMap = new Map(
-      (profilesRes.data ?? []).map((p) => [String(p.id), p])
-    );
-    const scoreMap = new Map(
-      (snapshotsRes.data ?? []).map((s) => [String(s.user_id), Number(s.score_total ?? 250)])
-    );
-
-    openLoans = fallbackLoans.map((l) => {
-      const borrowerId = String(l.borrower_id);
-      const profile = profileMap.get(borrowerId);
-      return {
-        id: String(l.id),
-        principal_amount: Number(l.principal_amount ?? 0),
-        apr_bps: Number(l.apr_bps ?? 0),
-        duration_days: Number(l.duration_days ?? 30),
-        borrower_id: borrowerId,
-        borrower_name:
-          profile?.full_name && String(profile.full_name).trim() !== ""
-            ? String(profile.full_name)
-            : `Borrower ${borrowerId.slice(0, 6)}`,
-        borrower_wallet: String(profile?.wallet_address ?? ""),
-        trust_score: Number(scoreMap.get(borrowerId) ?? 250),
-      };
-    });
-  }
+  const { getMarketplaceLoans } = await import("@/lib/dashboard/marketplace");
+  const openLoans = await getMarketplaceLoans();
 
   const fundedTxs        = fundedTxsRes.data        ?? [];
   const marketplaceLoans = openLoans.map((l) => ({

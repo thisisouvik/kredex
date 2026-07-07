@@ -14,7 +14,7 @@ export default async function LenderHomePage() {
   const supabase = await getServerSupabaseClient();
   const srClient = getServiceRoleClient();
 
-  const [positionsRes, profileRes, p2pRes, openLoanCountRes, allLoansRes, repaysRes] = supabase && srClient
+  const [positionsRes, profileRes, p2pRes, openLoanCountRes] = supabase && srClient
     ? await Promise.all([
         supabase
           .from("pool_positions")
@@ -38,15 +38,25 @@ export default async function LenderHomePage() {
           .from("loans")
           .select("id", { count: "exact", head: true })
           .in("status", ["requested", "approved"]),
+      ])
+    : [{ data: [] }, { data: null }, { data: [] }, { count: 0 }];
+
+  // 2. Fetch specific loans and repays based on funded loan IDs
+  const fundedLoanIds = (p2pRes?.data ?? []).map(tx => String(tx.ref_id));
+  
+  const [allLoansRes, repaysRes] = srClient && fundedLoanIds.length > 0
+    ? await Promise.all([
         srClient
           .from("loans")
-          .select("id, status, repaid_amount, principal_amount"),
+          .select("id, status, repaid_amount, principal_amount")
+          .in("id", fundedLoanIds),
         srClient
           .from("ledger_transactions")
-          .select("ref_id, metadata")
+          .select("ref_id, metadata, amount")
           .eq("ref_type", "loan_repay")
+          .in("ref_id", fundedLoanIds)
       ])
-    : [{ data: [] }, { data: null }, { data: [] }, { count: 0 }, { data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }];
 
   const positions     = positionsRes.data ?? [];
   const p2pInvestments = p2pRes.data ?? [];

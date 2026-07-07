@@ -62,6 +62,11 @@ export function presentAdminMetrics(metrics: AdminDashboardMetrics) {
 
 
 export async function getBorrowerDashboardMetrics(userId: string): Promise<BorrowerDashboardMetrics> {
+  const { withCache } = await import("@/lib/redis/cache");
+  return withCache(`metrics:borrower:${userId}`, 120, () => _getBorrowerDashboardMetrics(userId));
+}
+
+async function _getBorrowerDashboardMetrics(userId: string): Promise<BorrowerDashboardMetrics> {
   const supabase = await getServerSupabaseClient();
 
   if (!supabase) {
@@ -105,6 +110,11 @@ export async function getBorrowerDashboardMetrics(userId: string): Promise<Borro
 }
 
 export async function getLenderDashboardMetrics(userId: string): Promise<LenderDashboardMetrics> {
+  const { withCache } = await import("@/lib/redis/cache");
+  return withCache(`metrics:lender:${userId}`, 120, () => _getLenderDashboardMetrics(userId));
+}
+
+async function _getLenderDashboardMetrics(userId: string): Promise<LenderDashboardMetrics> {
   const { getServerSupabaseClient, getServiceRoleClient } = await import("@/lib/supabase/server");
   const supabase = await getServerSupabaseClient();
   const srClient = getServiceRoleClient();
@@ -132,10 +142,15 @@ export async function getLenderDashboardMetrics(userId: string): Promise<LenderD
       .eq("user_id", userId)
       .eq("ref_type", "loan_fund");
 
-    const { data: p2pRepays } = await srClient
-      .from("ledger_transactions")
-      .select("amount, metadata")
-      .eq("ref_type", "loan_repay");
+    const fundedLoanIds = (p2pFunds ?? []).map(tx => String(tx.ref_id));
+
+    const { data: p2pRepays } = fundedLoanIds.length > 0 
+      ? await srClient
+          .from("ledger_transactions")
+          .select("amount, metadata, ref_id")
+          .eq("ref_type", "loan_repay")
+          .in("ref_id", fundedLoanIds)
+      : { data: [] };
 
     const lenderRepays = (p2pRepays ?? []).filter(tx => {
       try {
@@ -144,53 +159,55 @@ export async function getLenderDashboardMetrics(userId: string): Promise<LenderD
       } catch { return false; }
     });
 
-    // We must group by loan (ref_id) so a newly funded loan doesn't wipe out past profits!
     const loanProfitMap = new Map<string, { deployed: number; received: number }>();
 
     for (const tx of (p2pFunds ?? [])) {
       const id = String(tx.ref_id);
       const cur = loanProfitMap.get(id) ?? { deployed: 0, received: 0 };
-      cur.deployed += Number(tx.amount || 0);
+      cur.deployed += Number(tx.amount ?? 0);
       loanProfitMap.set(id, cur);
     }
 
     for (const tx of lenderRepays) {
-      let id = "";
-      try {
-        const meta = JSON.parse(String(tx.metadata || "{}"));
-        id = meta.loanId ? String(meta.loanId) : "";
-      } catch {}
-      if (!id) continue;
-
-      const cur = loanProfitMap.get(id) ?? { deployed: 0, received: 0 };
-      cur.received += Number(tx.amount || 0);
-      loanProfitMap.set(id, cur);
+      const id = String(tx.ref_id);
+      if (id && loanProfitMap.has(id)) {
+        const cur = loanProfitMap.get(id)!;
+        cur.received += Number(tx.amount ?? 0);
+        loanProfitMap.set(id, cur);
+      }
     }
 
-    let p2pProfit = 0;
-    for (const { deployed, received } of loanProfitMap.values()) {
-      p2pProfit += Math.max(0, received - deployed);
+    let p2pEarnings = 0;
+    let p2pDeployed = 0;
+    let p2pActive = 0;
+    
+    for (const stats of loanProfitMap.values()) {
+       p2pDeployed += stats.deployed;
+       if (stats.received > 0) {
+          const profit = stats.received - stats.deployed;
+          if (profit > 0) p2pEarnings += profit;
+       } else {
+          p2pActive++;
+       }
     }
 
-    const p2pDeployed = (p2pFunds ?? []).reduce((s, t) => s + Number(t.amount || 0), 0);
+    // 3. Defaults
+    const defaultsRes = await srClient
+      .from("ledger_transactions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("ref_type", "loan_fund")
+      .contains("metadata", { status: "defaulted" });
+    const defaults = defaultsRes.data?.length ?? 0;
+    const totalLoans = (p2pFunds?.length ?? 0) + positions.length;
+    const defaultRate = totalLoans > 0 ? (defaults / totalLoans) * 100 : 0;
 
-    // Get active loan count from the funded loans
-    const loanIds = Array.from(loanProfitMap.keys());
-    let p2pActiveCount = 0;
-    if (loanIds.length > 0) {
-      const { data: loans } = await srClient
-        .from("loans")
-        .select("status")
-        .in("id", loanIds);
-      p2pActiveCount = (loans ?? []).filter(l => l.status === "active").length;
-    }
-
-    const deployedCapital = poolDeployed + p2pDeployed;
-    const totalEarnings = poolEarnings + p2pProfit;
-    const activePositions = poolActive + p2pActiveCount;
-    const defaultRate = 0;
-
-    return { deployedCapital, totalEarnings, activePositions, defaultRate };
+    return {
+      deployedCapital: poolDeployed + p2pDeployed,
+      totalEarnings: poolEarnings + p2pEarnings,
+      activePositions: poolActive + p2pActive,
+      defaultRate,
+    };
   } catch {
     return { deployedCapital: 0, totalEarnings: 0, activePositions: 0, defaultRate: 0 };
   }

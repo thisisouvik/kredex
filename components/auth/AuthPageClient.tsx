@@ -262,25 +262,28 @@ export function AuthPageClient() {
                 border: "none",
                 position: "relative",
                 overflow: "hidden",
+                whiteSpace: "normal",
+                textAlign: "left",
+                gap: "1rem",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flex: 1, minWidth: 0 }}>
                 {isLoading && activeWallet === "passkey" ? (
-                  <Loader2 size={22} className="animate-spin" />
+                  <Loader2 size={22} className="animate-spin" style={{ flexShrink: 0 }} />
                 ) : (
-                  <Fingerprint size={22} />
+                  <Fingerprint size={22} style={{ flexShrink: 0 }} />
                 )}
-                <div style={{ textAlign: "left" }}>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: "1rem" }}>
-                    {hasExistingPasskey ? "Continue with Passkey" : "Create Passkey Account"}
+                    {hasExistingPasskey ? "Continue with Passkey" : "Create Passkey"}
                   </div>
-                  <div style={{ fontSize: "0.75rem", opacity: 0.8, marginTop: "1px" }}>
-                    Face ID · Touch ID · Fingerprint — no seed phrase
+                  <div style={{ fontSize: "0.75rem", opacity: 0.8, marginTop: "1px", lineHeight: 1.3 }}>
+                    Face ID · Touch ID · Fingerprint
                   </div>
                 </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+                <span className="recommended-badge" style={{
                   background: "rgba(255,255,255,0.2)",
                   fontSize: "0.6rem",
                   fontWeight: 800,
@@ -305,50 +308,60 @@ export function AuthPageClient() {
             <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
           </div>
 
-          {/* Freighter */}
           <button
             onClick={handleFreighter}
             disabled={busy}
             className="btn btn-outline"
-            style={{ padding: "1rem 1.5rem", justifyContent: "space-between" }}
+            style={{ 
+              padding: "1rem 1.5rem", 
+              justifyContent: "space-between",
+              whiteSpace: "normal",
+              textAlign: "left",
+              gap: "1rem",
+            }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flex: 1, minWidth: 0 }}>
               {isLoading && activeWallet === "freighter" ? (
-                <Loader2 size={20} className="animate-spin" />
+                <Loader2 size={20} className="animate-spin" style={{ flexShrink: 0 }} />
               ) : (
-                <Monitor size={20} />
+                <Monitor size={20} style={{ flexShrink: 0 }} />
               )}
-              <div style={{ textAlign: "left" }}>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>Freighter Wallet</div>
-                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: "1px" }}>
+                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: "1px", lineHeight: 1.3 }}>
                   Browser extension — best for desktop
                 </div>
               </div>
             </div>
-            <ChevronRight size={16} style={{ opacity: 0.5 }} />
+            <ChevronRight size={16} style={{ opacity: 0.5, flexShrink: 0 }} />
           </button>
 
-          {/* Albedo — mobile-friendly */}
           <button
             onClick={handleAlbedo}
             disabled={busy}
             className="btn btn-outline"
-            style={{ padding: "1rem 1.5rem", justifyContent: "space-between" }}
+            style={{ 
+              padding: "1rem 1.5rem", 
+              justifyContent: "space-between",
+              whiteSpace: "normal",
+              textAlign: "left",
+              gap: "1rem",
+            }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flex: 1, minWidth: 0 }}>
               {isLoading && activeWallet === "albedo" ? (
-                <Loader2 size={20} className="animate-spin" />
+                <Loader2 size={20} className="animate-spin" style={{ flexShrink: 0 }} />
               ) : (
-                <Smartphone size={20} />
+                <Smartphone size={20} style={{ flexShrink: 0 }} />
               )}
-              <div style={{ textAlign: "left" }}>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>Albedo</div>
-                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: "1px" }}>
+                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: "1px", lineHeight: 1.3 }}>
                   Web-based · works on mobile
                 </div>
               </div>
             </div>
-            <ChevronRight size={16} style={{ opacity: 0.5 }} />
+            <ChevronRight size={16} style={{ opacity: 0.5, flexShrink: 0 }} />
           </button>
         </div>
 
