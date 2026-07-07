@@ -42,7 +42,9 @@ model WalletProfile {
   
   // KYC & Onboarding
   kycStatus       KycStatus   @default(PENDING) @map("kyc_status")
+  kycTier         Int         @default(0) @map("kyc_tier")  // 0=None, 1=Soft($500), 2=Full($5000)
   kycData         Json?       @map("kyc_data")
+  personaInquiryId String?    @map("persona_inquiry_id")  // Persona KYC session ID
   
   // Reputation (mirrors on-chain state)
   reputationScore Int         @default(0) @map("reputation_score")

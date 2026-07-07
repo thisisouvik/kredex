@@ -1,36 +1,32 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import prisma from '@/lib/prisma';
 
 export async function POST(req: Request) {
   try {
-    const { walletAddress } = await req.json();
+    const body = await req.json();
+    const { walletAddress, authType, credentialId } = body;
 
     if (!walletAddress) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
     }
 
-    // Generate a secure random nonce
-    const nonce = crypto.randomBytes(32).toString('hex');
-    
-    // Set expiration to 5 minutes from now
+    // For passkey wallets, also store the credentialId with the challenge
+    // so the verify step can look it up
+    if (authType === 'passkey' && !credentialId) {
+      return NextResponse.json({ error: 'credentialId required for passkey auth' }, { status: 400 });
+    }
+
+    const nonce = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Upsert to handle retries for the same wallet
-    const challenge = await prisma.authChallenge.upsert({
+    await prisma.authChallenge.upsert({
       where: { walletAddress },
-      update: {
-        nonce,
-        expiresAt,
-      },
-      create: {
-        walletAddress,
-        nonce,
-        expiresAt,
-      },
+      update: { nonce, expiresAt },
+      create: { walletAddress, nonce, expiresAt },
     });
 
-    return NextResponse.json({ nonce: challenge.nonce });
+    return NextResponse.json({ nonce });
+
   } catch (error) {
     console.error('Challenge error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

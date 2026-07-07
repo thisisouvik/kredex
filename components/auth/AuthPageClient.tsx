@@ -1,160 +1,363 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ShieldCheck, Smartphone, Monitor, Wallet } from "lucide-react";
+import {
+  Loader2, ShieldCheck, Smartphone, Monitor, Fingerprint,
+  Wallet, ChevronRight, AlertTriangle
+} from "lucide-react";
 import albedo from "@albedo-link/intent";
 import {
   isConnected,
   setAllowed,
   getAddress,
-  signMessage
+  signMessage,
 } from "@stellar/freighter-api";
+import {
+  isPasskeySupported,
+  registerPasskey,
+  authenticatePasskey,
+  getStoredCredentialId,
+} from "@/lib/wallet/passkey";
+
+type WalletOption = "freighter" | "albedo" | "passkey";
+
+interface AuthMessage {
+  type: "error" | "info" | "success";
+  text: string;
+}
 
 export function AuthPageClient() {
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [activeWallet, setActiveWallet] = useState<"freighter" | "albedo" | null>(null);
-  const [message, setMessage] = useState<{ type: "error" | "info" | "success"; text: string } | null>(null);
+  const [activeWallet, setActiveWallet] = useState<WalletOption | null>(null);
+  const [message, setMessage] = useState<AuthMessage | null>(null);
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
+  const [hasExistingPasskey, setHasExistingPasskey] = useState(false);
 
-  const handleWalletLogin = async (walletType: "freighter" | "albedo") => {
+  // Check passkey support on mount
+  useEffect(() => {
+    isPasskeySupported().then((supported) => {
+      setPasskeyAvailable(supported);
+      if (supported) {
+        setHasExistingPasskey(!!getStoredCredentialId());
+      }
+    });
+  }, []);
+
+  // ── Core Auth Flow ──────────────────────────────────────────────────────────
+  const runAuthFlow = async (walletAddress: string, walletType: WalletOption, extraBody?: object) => {
+    // 1. Get challenge nonce
+    const challengeRes = await fetch("/api/auth/challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress, authType: walletType }),
+    });
+    const { nonce, error: challengeErr } = await challengeRes.json();
+    if (!challengeRes.ok) throw new Error(challengeErr || "Failed to get challenge");
+
+    // 2. Sign nonce
+    let signPayload: object = {};
+    if (walletType === "freighter") {
+      try {
+        const signRes = await signMessage(nonce);
+        const sig = typeof signRes === "string" ? signRes : (signRes as any).signature ?? "";
+        signPayload = { signature: sig };
+      } catch (e: any) {
+        throw new Error("Freighter signing failed: " + (e?.message || e));
+      }
+    } else if (walletType === "albedo") {
+      const signRes = await albedo.signMessage({ message: nonce, pubkey: walletAddress });
+      signPayload = { signature: signRes.message_signature };
+    } else {
+      // Passkey — sign via WebAuthn assertion
+      const credentialId = getStoredCredentialId() ?? undefined;
+      const assertion = await authenticatePasskey(nonce, credentialId);
+      signPayload = {
+        credentialId: assertion.credentialId,
+        clientDataJSON: assertion.clientDataJSON,
+        authenticatorData: assertion.authenticatorData,
+        signatureB64: assertion.signature,
+      };
+    }
+
+    // 3. Verify and issue session
+    const verifyRes = await fetch("/api/auth/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        walletAddress,
+        authType: walletType,
+        ...signPayload,
+        ...extraBody,
+      }),
+    });
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
+
+    return verifyData;
+  };
+
+  // ── Freighter Handler ───────────────────────────────────────────────────────
+  const handleFreighter = async () => {
     setIsLoading(true);
-    setActiveWallet(walletType);
+    setActiveWallet("freighter");
     setMessage(null);
-
     try {
-      let walletAddress = "";
-      
-      // 1. Get Wallet Address
-      if (walletType === "freighter") {
-        if (!(await isConnected())) {
-          setMessage({ type: "error", text: "Freighter is not installed or locked." });
-          setIsLoading(false);
-          setActiveWallet(null);
-          return;
-        }
-        await setAllowed();
-        const addressRes = await getAddress();
-        if (addressRes.error) throw new Error(addressRes.error);
-        walletAddress = addressRes.address;
-      } else {
-        // Albedo works great on mobile web
-        const res = await albedo.publicKey({});
-        walletAddress = res.pubkey;
+      const connected = await isConnected();
+      if (!connected) {
+        setMessage({ type: "error", text: "Freighter is not installed or locked. Install it from freighter.app" });
+        return;
       }
+      await setAllowed();
+      const res = await getAddress();
+      if (res.error) throw new Error(res.error);
 
-      if (!walletAddress) {
-        throw new Error("Failed to get wallet address");
-      }
-
-      // 2. Fetch Challenge Nonce
-      const challengeRes = await fetch("/api/auth/challenge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress }),
-      });
-
-      const challengeData = await challengeRes.json();
-      if (!challengeRes.ok) throw new Error(challengeData.error || "Failed to get auth challenge");
-
-      const nonce = challengeData.nonce;
-
-      // 3. Sign the Nonce
-      let signatureBase64 = "";
-
-      if (walletType === "freighter") {
-        try {
-          const signRes = await signMessage(nonce);
-          signatureBase64 = typeof signRes === 'string' ? signRes : (signRes as any).signature || Buffer.from((signRes as any).signature).toString('base64');
-        } catch (e: any) {
-          console.error("Freighter signing error:", e);
-          throw new Error("Failed to sign message with Freighter. " + (e.message || ""));
-        }
-      } else {
-        const signRes = await albedo.signMessage({
-          message: nonce,
-          pubkey: walletAddress
-        });
-        signatureBase64 = signRes.message_signature;
-      }
-
-      // 4. Verify Signature & Issue JWT
-      const verifyRes = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress, signature: signatureBase64 }),
-      });
-
-      const verifyData = await verifyRes.json();
-      if (!verifyRes.ok) throw new Error(verifyData.error || "Signature verification failed");
-
-      // 5. Success! Navigate to unified dashboard
+      await runAuthFlow(res.address, "freighter");
       router.push("/dashboard");
-
     } catch (err: any) {
-      console.error(err);
-      setMessage({ type: "error", text: err.message || "An unexpected error occurred." });
+      setMessage({ type: "error", text: err.message || "Freighter login failed." });
     } finally {
       setIsLoading(false);
       setActiveWallet(null);
     }
   };
 
+  // ── Albedo Handler ──────────────────────────────────────────────────────────
+  const handleAlbedo = async () => {
+    setIsLoading(true);
+    setActiveWallet("albedo");
+    setMessage(null);
+    try {
+      const res = await albedo.publicKey({});
+      await runAuthFlow(res.pubkey, "albedo");
+      router.push("/dashboard");
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message || "Albedo login failed." });
+    } finally {
+      setIsLoading(false);
+      setActiveWallet(null);
+    }
+  };
+
+  // ── Passkey Handler ─────────────────────────────────────────────────────────
+  const handlePasskey = async () => {
+    setIsLoading(true);
+    setActiveWallet("passkey");
+    setMessage(null);
+    try {
+      const existingCredentialId = getStoredCredentialId();
+
+      if (existingCredentialId) {
+        // ── Returning user — authenticate ──────────────────────────────────
+        // We need a wallet handle first to get a challenge.
+        // The handle is stored with the credential.
+        // We use the credential ID prefix as the wallet handle (same as registration).
+        const walletHandle = `pk_${existingCredentialId.slice(0, 24)}`;
+        await runAuthFlow(walletHandle, "passkey");
+        router.push("/dashboard");
+      } else {
+        // ── New user — register passkey ────────────────────────────────────
+        setMessage({ type: "info", text: "Creating your passkey — follow the biometric prompt..." });
+
+        const displayName = `user_${Date.now().toString(36)}`;
+        const reg = await registerPasskey(displayName);
+
+        // Store the passkey profile in DB so verify can look it up
+        const regRes = await fetch("/api/auth/passkey/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletHandle: reg.walletHandle,
+            credentialId: reg.credentialId,
+            publicKeyBase64: reg.publicKeyBase64,
+          }),
+        });
+        if (!regRes.ok) throw new Error("Failed to register passkey");
+
+        // Now authenticate immediately after registration
+        await runAuthFlow(reg.walletHandle, "passkey");
+        router.push("/dashboard");
+      }
+    } catch (err: any) {
+      if (err.name === "NotAllowedError") {
+        setMessage({ type: "error", text: "Biometric authentication was cancelled. Please try again." });
+      } else {
+        setMessage({ type: "error", text: err.message || "Passkey login failed." });
+      }
+    } finally {
+      setIsLoading(false);
+      setActiveWallet(null);
+    }
+  };
+
+  const busy = isLoading;
+
   return (
     <main className="auth-page-shell">
-      <div className="auth-page-card glass-panel" style={{ textAlign: "center" }}>
-        
-        <div className="auth-header" style={{ marginBottom: "2rem" }}>
+      <div className="auth-page-card glass-panel">
+        {/* Header */}
+        <div className="auth-header" style={{ textAlign: "center", marginBottom: "2rem" }}>
           <div
             className="role-badge"
-            style={{ backgroundColor: `var(--accent-alpha)`, color: "var(--accent)", margin: "0 auto 1rem auto" }}
+            style={{
+              background: "linear-gradient(135deg, var(--accent-alpha), rgba(139,92,246,0.15))",
+              color: "var(--accent)",
+              margin: "0 auto 1rem auto",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
           >
-            <Wallet size={16} /> Web3 Login
+            <Wallet size={16} /> Wallet Login
           </div>
-          <h1 className="heading-xl">Connect Wallet</h1>
-          <p className="text-secondary">Sign in securely with your Stellar wallet</p>
+          <h1 className="heading-xl" style={{ marginBottom: "0.5rem" }}>Connect to TrustLend</h1>
+          <p className="text-secondary">Sign in with your Stellar wallet or device biometrics.</p>
+          <p className="text-secondary" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
+            No password. No email. You own your account.
+          </p>
         </div>
 
+        {/* Message */}
         {message && (
-          <div className={`auth-alert auth-alert--${message.type}`} style={{ textAlign: "left" }}>
-            {message.type === "error" && <ShieldCheck size={18} />}
-            <span>{message.text}</span>
+          <div
+            className={`auth-alert auth-alert--${message.type}`}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.75rem",
+              marginBottom: "1.5rem",
+              padding: "0.9rem 1.1rem",
+              borderRadius: "10px",
+              background: message.type === "error"
+                ? "rgba(239,68,68,0.12)"
+                : message.type === "success"
+                  ? "rgba(34,207,157,0.12)"
+                  : "rgba(96,165,250,0.12)",
+              border: `1px solid ${message.type === "error" ? "rgba(239,68,68,0.3)" : message.type === "success" ? "rgba(34,207,157,0.3)" : "rgba(96,165,250,0.3)"}`,
+            }}
+          >
+            {message.type === "error"
+              ? <AlertTriangle size={18} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />
+              : <ShieldCheck size={18} style={{ color: "#22cf9d", flexShrink: 0, marginTop: 2 }} />
+            }
+            <span style={{ fontSize: "0.9rem", lineHeight: 1.5 }}>{message.text}</span>
           </div>
         )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
+        {/* Wallet Buttons */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+
+          {/* Passkey — shown first if supported */}
+          {passkeyAvailable && (
+            <button
+              onClick={handlePasskey}
+              disabled={busy}
+              className="btn btn-primary"
+              style={{
+                padding: "1.2rem 1.5rem",
+                justifyContent: "space-between",
+                background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                border: "none",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                {isLoading && activeWallet === "passkey" ? (
+                  <Loader2 size={22} className="animate-spin" />
+                ) : (
+                  <Fingerprint size={22} />
+                )}
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontWeight: 700, fontSize: "1rem" }}>
+                    {hasExistingPasskey ? "Continue with Passkey" : "Create Passkey Account"}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", opacity: 0.8, marginTop: "1px" }}>
+                    Face ID · Touch ID · Fingerprint — no seed phrase
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span style={{
+                  background: "rgba(255,255,255,0.2)",
+                  fontSize: "0.6rem",
+                  fontWeight: 800,
+                  padding: "2px 7px",
+                  borderRadius: "999px",
+                  letterSpacing: "0.08em"
+                }}>
+                  RECOMMENDED
+                </span>
+                <ChevronRight size={18} />
+              </div>
+            </button>
+          )}
+
+          {/* Divider */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: "0.75rem",
+            color: "var(--text-secondary)", fontSize: "0.8rem"
+          }}>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            {passkeyAvailable ? "Or use a Stellar wallet" : "Select a wallet"}
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          </div>
+
+          {/* Freighter */}
           <button
-            className="btn btn-primary"
-            style={{ padding: "1.2rem", fontSize: "1.1rem", justifyContent: "center", gap: "1rem" }}
-            onClick={() => handleWalletLogin("freighter")}
-            disabled={isLoading}
+            onClick={handleFreighter}
+            disabled={busy}
+            className="btn btn-outline"
+            style={{ padding: "1rem 1.5rem", justifyContent: "space-between" }}
           >
-            {isLoading && activeWallet === "freighter" ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <Monitor size={20} />
-            )}
-            Connect Freighter (Desktop)
+            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+              {isLoading && activeWallet === "freighter" ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <Monitor size={20} />
+              )}
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontWeight: 600 }}>Freighter Wallet</div>
+                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: "1px" }}>
+                  Browser extension — best for desktop
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={16} style={{ opacity: 0.5 }} />
           </button>
 
+          {/* Albedo — mobile-friendly */}
           <button
+            onClick={handleAlbedo}
+            disabled={busy}
             className="btn btn-outline"
-            style={{ padding: "1.2rem", fontSize: "1.1rem", justifyContent: "center", gap: "1rem" }}
-            onClick={() => handleWalletLogin("albedo")}
-            disabled={isLoading}
+            style={{ padding: "1rem 1.5rem", justifyContent: "space-between" }}
           >
-            {isLoading && activeWallet === "albedo" ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <Smartphone size={20} />
-            )}
-            Connect Albedo (Mobile Friendly)
+            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+              {isLoading && activeWallet === "albedo" ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <Smartphone size={20} />
+              )}
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontWeight: 600 }}>Albedo</div>
+                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: "1px" }}>
+                  Web-based · works on mobile
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={16} style={{ opacity: 0.5 }} />
           </button>
         </div>
 
-        <p className="text-secondary text-sm" style={{ textAlign: "center", marginTop: "2rem" }}>
-          By connecting your wallet, you agree to our Terms of Service. No passwords required.
+        {/* Footer */}
+        <p
+          className="text-secondary"
+          style={{ textAlign: "center", marginTop: "1.75rem", fontSize: "0.78rem", lineHeight: 1.6 }}
+        >
+          By connecting, you agree to our Terms of Service. Your wallet is your identity — we never store private keys.
         </p>
       </div>
     </main>
