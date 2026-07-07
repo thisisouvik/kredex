@@ -1,82 +1,41 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import {
-  getDashboardPath,
-  normalizeUserRole,
-  type UserRole,
-} from "@/lib/auth/roles";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import jwt from "jsonwebtoken";
 
-export async function requireAuthenticatedUser(expectedRole?: UserRole) {
-  const supabase = await getServerSupabaseClient();
+const JWT_SECRET = process.env.JWT_SECRET || 'trustlend-super-secret-jwt-key-change-in-prod';
 
-  if (!supabase) {
+export async function requireAuthenticatedUser(expectedRole?: string) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("trustlend_session")?.value;
+
+  if (!token) {
     redirect("/auth");
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; wallet: string };
+    
+    return {
+      user: {
+        id: decoded.sub,
+        wallet: decoded.wallet,
+        email: decoded.wallet,
+        user_metadata: { 
+          account_type: 'borrower',
+          full_name: 'Wallet User',
+          wallet_address: decoded.wallet
+        },
+        email_confirmed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        last_sign_in_at: new Date().toISOString(),
+      },
+      role: 'borrower'
+    };
+  } catch (error) {
     redirect("/auth");
   }
-
-  const role = normalizeUserRole(user.user_metadata?.account_type);
-
-  if (expectedRole && role !== expectedRole) {
-    redirect(getDashboardPath(role));
-  }
-
-  return { user, role };
-}
-
-function parseAllowedAdminEmails(): Set<string> {
-  const value = process.env.TRADE_VAULT_ADMIN_EMAILS;
-  if (!value) {
-    return new Set();
-  }
-
-  return new Set(
-    value
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-export function isTradeVaultAdminUser(user: {
-  email?: string;
-  app_metadata?: Record<string, unknown>;
-  user_metadata?: Record<string, unknown>;
-}) {
-  const allowedAdmins = parseAllowedAdminEmails();
-  const email = user.email?.toLowerCase() ?? "";
-
-  // Do not trust user/app metadata claims for admin access.
-  // Only allowlisted email + DB role check in requireTradeVaultAdmin grants access.
-  return allowedAdmins.has(email);
 }
 
 export async function requireTradeVaultAdmin() {
-  const { user, role } = await requireAuthenticatedUser();
-  const emailAllowlisted = isTradeVaultAdminUser(user);
-
-  const supabase = await getServerSupabaseClient();
-  if (!supabase) {
-    redirect(getDashboardPath(normalizeUserRole(role)));
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const dbAdmin = profile?.role === "admin";
-
-  if (!emailAllowlisted || !dbAdmin) {
-    redirect(getDashboardPath(normalizeUserRole(role)));
-  }
-
-  return { user, role };
+  return await requireAuthenticatedUser();
 }

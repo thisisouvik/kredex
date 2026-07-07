@@ -3,16 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
-
-enum AppRole {
-  BORROWER
-  LENDER
-  ADMIN
-}
 
 enum KycStatus {
   PENDING
@@ -43,7 +39,6 @@ enum LoanStatus {
 model WalletProfile {
   id              String      @id @default(uuid())
   walletAddress   String      @unique @map("wallet_address")
-  role            AppRole     @default(BORROWER)
   
   // KYC & Onboarding
   kycStatus       KycStatus   @default(PENDING) @map("kyc_status")
