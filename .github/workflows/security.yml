@@ -12,6 +12,8 @@ jobs:
   security-audit:
     name: NPM Audit Security Check
     runs-on: ubuntu-latest
+    env:
+      PRISMA_SKIP_POSTINSTALL_GENERATE: true
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

@@ -35,6 +35,19 @@ jobs:
   build-frontend:
     name: Build Next.js Application
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co"
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "dummy-key"
+      NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
+      NEXT_PUBLIC_STELLAR_HORIZON_URL: "https://horizon-testnet.stellar.org"
+      NEXT_PUBLIC_ADMIN_ADDRESS: "GAJRNUO6HSMQG4FNHNWQVRXJZJZ7QRA7HXPYYB6H5PTA3EAAJXJNZD7U"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
+      UPSTASH_REDIS_REST_URL: "https://dummy.upstash.io"
+      UPSTASH_REDIS_REST_TOKEN: "dummy_token"
+      NEXT_PUBLIC_REPUTATION_NFT_CONTRACT_ID: "C_DUMMY_NFT_CONTRACT"
+      JWT_SECRET: "dummy_jwt_secret"
+      CRON_SECRET: "dummy_cron_secret"
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -55,17 +68,5 @@ jobs:
         run: npm run lint
 
       - name: Build Next.js
-        # We set this environment variable because dummy keys are needed for the build if relying on env
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co"
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: "dummy-key"
-          NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
-          NEXT_PUBLIC_STELLAR_HORIZON_URL: "https://horizon-testnet.stellar.org"
-          NEXT_PUBLIC_ADMIN_ADDRESS: "GAJRNUO6HSMQG4FNHNWQVRXJZJZ7QRA7HXPYYB6H5PTA3EAAJXJNZD7U"
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres"
-          UPSTASH_REDIS_REST_URL: "https://dummy.upstash.io"
-          UPSTASH_REDIS_REST_TOKEN: "dummy_token"
-          NEXT_PUBLIC_REPUTATION_NFT_CONTRACT_ID: "C_DUMMY_NFT_CONTRACT"
-          JWT_SECRET: "dummy_jwt_secret"
-          CRON_SECRET: "dummy_cron_secret"
         run: npm run build
+

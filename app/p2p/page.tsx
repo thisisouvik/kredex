@@ -15,12 +15,12 @@ export default async function P2PPage() {
     <div className="site-shell">
       <SiteHeader items={navItems} isAuthenticated={isAuthenticated} />
       
-      <main className="pt-24 pb-12">
-        <div className="crypto-container text-center mb-12">
-          <h1 className="font-display text-4xl md:text-5xl text-[#1d254a] mb-4">
+      <main style={{ padding: "6rem 0 3rem" }}>
+        <div className="crypto-container" style={{ textAlign: "center", marginBottom: "3rem" }}>
+          <h1 className="heading-xl" style={{ marginBottom: "1rem" }}>
             Peer-to-Peer Lending
           </h1>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+          <p className="text-secondary" style={{ fontSize: "1.1rem", maxWidth: "600px", margin: "0 auto" }}>
             Kredex connects lenders and borrowers directly using smart contracts, eliminating middlemen and ensuring trustless, atomic execution.
           </p>
         </div>

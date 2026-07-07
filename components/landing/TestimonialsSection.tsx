@@ -1,3 +1,5 @@
+"use client";
+
 import type { Testimonial } from "@/types/landing";
 
 interface TestimonialsSectionProps {
@@ -6,29 +8,31 @@ interface TestimonialsSectionProps {
 
 export function TestimonialsSection({ items }: TestimonialsSectionProps) {
   return (
-    <section className="section-anchor testimonials-section py-20 bg-slate-50/50">
+    <section className="section-anchor py-20" id="testimonials">
       <div className="crypto-container">
-        <h2 className="font-display text-3xl md:text-4xl text-center text-[#1d254a] mb-12">
-          Trusted by Borrowers & Lenders
+        <h2 className="heading-xl text-center" style={{ marginBottom: "3rem" }}>
+          Trusted by <span className="hero-title-accent">Borrowers & Lenders</span>
         </h2>
-        <div className="grid gap-8 md:grid-cols-3">
+        <div className="testimonial-grid">
           {items.map((item, index) => (
-            <article
-              key={index}
-              className="bg-white/80 backdrop-blur-xl p-8 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-center gap-4 mb-6">
+            <article key={index} className="glass-panel testimonial-card">
+              <div className="testimonial-header">
                 <img
                   src={item.avatar}
                   alt={item.name}
-                  className="w-12 h-12 rounded-full object-cover"
+                  className="testimonial-avatar"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "https://ui-avatars.com/api/?name=" + encodeURIComponent(item.name) + "&background=6366F1&color=fff";
+                  }}
                 />
                 <div>
-                  <h3 className="font-medium text-slate-900">{item.name}</h3>
-                  <p className="text-sm text-slate-500">{item.role}</p>
+                  <h3 className="heading-md">{item.name}</h3>
+                  <p className="text-secondary" style={{ fontSize: "0.85rem" }}>{item.role}</p>
                 </div>
               </div>
-              <p className="text-slate-700 italic">"{item.review}"</p>
+              <p className="text-secondary" style={{ fontStyle: "italic", lineHeight: 1.7 }}>
+                "{item.review}"
+              </p>
             </article>
           ))}
         </div>

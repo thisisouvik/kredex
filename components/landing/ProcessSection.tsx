@@ -13,8 +13,8 @@ export function ProcessSection({ steps }: ProcessSectionProps) {
             <article key={step.step} className="journey-step-card">
               <div className="journey-step-badge">Step {step.step}</div>
               <div>
-                <h3 className="font-display text-lg text-[#2c2a53]">{step.title}</h3>
-                <p className="mt-1 text-sm text-slate-600">{step.description}</p>
+                <h3>{step.title}</h3>
+                <p>{step.description}</p>
               </div>
             </article>
           ))}
@@ -22,7 +22,7 @@ export function ProcessSection({ steps }: ProcessSectionProps) {
 
         <article className="journey-cta">
           <p className="journey-kicker">JOIN EASILY WITH JUST</p>
-          <h2 className="font-display text-5xl text-[#7325c8]">5 Steps</h2>
+          <h2>5 Steps</h2>
           <a href="/auth" className="journey-button">
             Start now
           </a>

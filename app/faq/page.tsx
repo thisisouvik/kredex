@@ -15,12 +15,12 @@ export default async function FaqPage() {
     <div className="site-shell">
       <SiteHeader items={navItems} isAuthenticated={isAuthenticated} />
       
-      <main className="pt-24 pb-12">
-        <div className="crypto-container text-center mb-8">
-          <h1 className="font-display text-4xl md:text-5xl text-[#1d254a] mb-4">
+      <main style={{ padding: "6rem 0 3rem" }}>
+        <div className="crypto-container" style={{ textAlign: "center", marginBottom: "3rem" }}>
+          <h1 className="heading-xl" style={{ marginBottom: "1rem" }}>
             Frequently Asked Questions
           </h1>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+          <p className="text-secondary" style={{ fontSize: "1.1rem", maxWidth: "600px", margin: "0 auto" }}>
             Everything you need to know about building reputation and participating in our decentralized lending ecosystem.
           </p>
         </div>

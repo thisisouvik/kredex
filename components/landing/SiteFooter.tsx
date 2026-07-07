@@ -15,13 +15,12 @@ export function SiteFooter({ links }: SiteFooterProps) {
               <div
                 style={{
                   width: 36, height: 36, borderRadius: 10,
-                  background: "linear-gradient(135deg, #6366F1, #14B8A6)",
+                  background: "rgba(255, 255, 255, 0.9)",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800,
-                  color: "#fff", fontSize: "1rem",
+                  boxShadow: "0 4px 14px rgba(99,102,241,0.25)"
                 }}
               >
-                K
+                <img src="/logo.png" alt="Kredex Logo" style={{ width: 24, height: 24, objectFit: 'contain' }} />
               </div>
               <h2 className="font-display site-footer-brand" style={{ margin: 0 }}>Kredex</h2>
             </div>

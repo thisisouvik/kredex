@@ -12,7 +12,9 @@ export function SiteHeader({ items, isAuthenticated = false }: SiteHeaderProps) 
       <div className="crypto-container site-header-row">
         {/* Logo */}
         <a href="#home" className="site-logo-wrap" aria-label="Kredex home">
-          <div className="site-logo-orb" aria-hidden="true">K</div>
+          <div className="site-logo-orb" aria-hidden="true">
+            <Image src="/logo.png" alt="Kredex" width={24} height={24} style={{ objectFit: 'contain' }} />
+          </div>
           <span>
             <strong className="font-display site-logo-title">Kredex</strong>
             <small className="site-logo-subtitle">On-chain credit network</small>

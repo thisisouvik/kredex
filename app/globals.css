@@ -415,14 +415,10 @@ input, select, textarea { font: inherit; }
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--indigo), var(--teal));
+  background: rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
-  font-weight: 800;
-  color: #fff;
-  font-family: 'Space Grotesk', sans-serif;
   box-shadow: 0 4px 14px var(--indigo-glow);
   flex-shrink: 0;
 }
@@ -1528,3 +1524,212 @@ input, select, textarea { font: inherit; }
 .grid { display: grid; }
 @media (min-width: 640px) { .sm\:grid-cols-2 { grid-template-columns: repeat(2, 1fr); } }
 .py-14 { padding-block: 3.5rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MARKETING SECTIONS (Testimonials, FAQ, P2P, How it works)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Testimonials */
+.testimonial-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+.testimonial-card {
+  padding: 2rem;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.testimonial-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-glow);
+  border-color: var(--indigo);
+}
+.testimonial-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.testimonial-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-strong);
+}
+
+/* FAQ Section */
+.faq-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3rem;
+  align-items: start;
+}
+@media (min-width: 768px) {
+  .faq-grid { grid-template-columns: 250px 1fr; }
+}
+.faq-sidebar ul { list-style: none; padding: 0; }
+.faq-chip {
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.faq-chip:hover { background: var(--bg-hover); color: var(--text-primary); }
+.faq-chip.faq-chip-active {
+  background: var(--indigo-alpha);
+  color: var(--indigo-light);
+  border-left: 3px solid var(--indigo);
+}
+.faq-main { display: flex; flex-direction: column; gap: 1rem; }
+.faq-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.faq-item:hover { border-color: var(--border-strong); }
+.faq-item summary {
+  padding: 1.5rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: '+';
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  transition: transform var(--transition);
+}
+.faq-item[open] summary::after {
+  content: '−';
+}
+.faq-item p {
+  padding: 0 1.5rem 1.5rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* P2P Section */
+.p2p-title {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+.p2p-description {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  max-width: 600px;
+  margin: 0 auto 3rem;
+  line-height: 1.7;
+}
+.p2p-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  text-align: left;
+  transition: transform var(--transition), border-color var(--transition);
+}
+.p2p-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--teal);
+}
+.p2p-card h3 { color: var(--text-primary); margin-bottom: 0.5rem; }
+.p2p-card p { color: var(--text-secondary); line-height: 1.6; }
+.p2p-badge {
+  display: inline-flex;
+  width: 40px; height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: var(--teal-alpha);
+  color: var(--teal-light);
+  font-weight: 800;
+  font-family: 'Space Grotesk', sans-serif;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  font-size: 1.2rem;
+}
+.p2p-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem 2rem;
+  background: linear-gradient(135deg, var(--teal), #0D9488);
+  color: #fff;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  box-shadow: 0 4px 14px var(--teal-glow);
+  transition: transform var(--transition);
+}
+.p2p-button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px var(--teal-glow); }
+
+/* Journey / Process Section */
+.journey-step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  gap: 1.5rem;
+  transition: border-color var(--transition);
+}
+.journey-step-card:hover { border-color: var(--indigo-light); }
+.journey-step-badge {
+  flex-shrink: 0;
+  padding: 0.4rem 0.8rem;
+  background: var(--indigo-alpha);
+  color: var(--indigo-light);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  height: fit-content;
+}
+.journey-step-card h3 { color: var(--text-primary); margin-bottom: 0.5rem; font-weight: 600; }
+.journey-step-card p { color: var(--text-secondary); line-height: 1.6; }
+.journey-cta {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  padding: 3rem 2rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.journey-kicker {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  margin-bottom: 1rem;
+}
+.journey-cta h2 { color: var(--indigo-light); margin-bottom: 2rem; }
+.journey-button {
+  display: inline-flex;
+  padding: 0.85rem 2.5rem;
+  background: #fff;
+  color: var(--bg-base);
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  transition: transform var(--transition);
+}
+.journey-button:hover { transform: translateY(-2px); }
