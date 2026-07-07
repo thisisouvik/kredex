@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 /**
@@ -19,7 +19,7 @@ import { isRedirectError } from "next/dist/client/components/redirect-error";
 export async function POST(request: NextRequest) {
   try {
     const { user } = await requireAuthenticatedUser("lender");
-    const supabase = await getServerSupabaseClient();
+    const supabase = getServiceRoleClient();
     if (!supabase) {
       return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
     }

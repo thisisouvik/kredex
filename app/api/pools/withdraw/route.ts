@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 export async function POST(request: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Amount exceeds maximum allowed" }, { status: 400 });
     }
 
-    const supabase = await getServerSupabaseClient();
+    const supabase = getServiceRoleClient();
     if (!supabase) {
       return NextResponse.json({ error: "Database unavailable" }, { status: 500 });
     }

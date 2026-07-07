@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Double-check borrower & loan
-    const { data: loan, error: loanError } = await supabase
+    const { data: loan, error: loanError } = await srClient
       .from("loans")
       .select("id, borrower_id, status, repaid_amount, principal_amount, apr_bps, duration_days")
       .eq("id", loanId)
