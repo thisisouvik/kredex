@@ -60,7 +60,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full" data-scroll-behavior="smooth">
       <body
-        className={`${inter.variable} ${spaceGrotesk.variable} flex min-h-full flex-col antialiased`}
+        className={`${inter.variable} ${spaceGrotesk.variable} flex w-full min-h-full flex-col antialiased`}
         style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}
       >
         {children}

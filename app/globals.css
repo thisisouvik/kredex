@@ -136,11 +136,17 @@ input, select, textarea { font: inherit; }
 /* ── Layout ────────────────────────────────────────────────────────────────── */
 .container, .crypto-container {
   width: min(1200px, calc(100% - 2.5rem));
-  margin-inline: auto;
+  margin: 0 auto;
 }
 
 .section-anchor { scroll-margin-top: 80px; }
-.site-shell { overflow: clip; }
+.site-shell {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: clip;
+}
 
 /* ── Glass Panel ───────────────────────────────────────────────────────────── */
 .glass-panel {
@@ -383,6 +389,7 @@ input, select, textarea { font: inherit; }
   position: sticky;
   top: 0;
   z-index: 50;
+  width: 100%;
   background: rgba(8,12,20,0.85);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(20px);
@@ -527,6 +534,7 @@ input, select, textarea { font: inherit; }
    ═══════════════════════════════════════════════════════════════════════════ */
 .hero-section {
   position: relative;
+  width: 100%;
   padding: clamp(5rem, 12vw, 9rem) 0 clamp(4rem, 8vw, 7rem);
   overflow: hidden;
 }
@@ -677,6 +685,7 @@ input, select, textarea { font: inherit; }
   box-shadow: var(--shadow-lg);
   position: relative;
   overflow: hidden;
+  width: 100%;
 }
 
 .hero-visual-card::before {
@@ -838,6 +847,8 @@ input, select, textarea { font: inherit; }
    ═══════════════════════════════════════════════════════════════════════════ */
 .auth-page-shell {
   min-height: 100dvh;
+  width: 100%;
+  flex: 1;
   background: var(--bg-base);
   display: flex;
   align-items: center;
@@ -853,7 +864,8 @@ input, select, textarea { font: inherit; }
   top: -300px;
   left: 50%;
   transform: translateX(-50%);
-  width: 800px;
+  width: 100%;
+  max-width: 800px;
   height: 600px;
   background: radial-gradient(ellipse at 50% 50%, rgba(99,102,241,0.12) 0%, transparent 65%);
   pointer-events: none;
@@ -868,6 +880,12 @@ input, select, textarea { font: inherit; }
   box-shadow: var(--shadow-lg);
   position: relative;
   z-index: 1;
+}
+
+@media (max-width: 640px) {
+  .auth-page-card {
+    padding: 1.5rem;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1292,6 +1310,19 @@ input, select, textarea { font: inherit; }
     grid-template-columns: repeat(2, 1fr) !important;
     padding: 1rem 1.25rem;
     --metric-columns: 2 !important;
+  }
+
+  .dashboard-role-grid {
+    grid-template-columns: 1fr !important;
+    padding: 1rem 1.25rem 2rem !important;
+  }
+  
+  .dashboard-home-hero {
+    padding: 2.5rem 1rem 1rem !important;
+  }
+
+  .info-strip {
+    padding: 0 1.25rem !important;
   }
 }
 
