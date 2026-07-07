@@ -52,3 +52,10 @@ export interface FooterLink {
   label: string;
   href: string;
 }
+
+export interface Testimonial {
+  name: string;
+  role: string;
+  review: string;
+  avatar: string;
+}

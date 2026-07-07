@@ -2,7 +2,9 @@ import {
   HeroSection,
   SiteFooter,
   SiteHeader,
+  TestimonialsSection,
   UspSection,
+  FaqSection,
 } from "@/components/landing";
 import { getAuthenticatedUser } from "@/lib/auth/session";
 import {
@@ -10,6 +12,8 @@ import {
   heroContent,
   navItems,
   reasons,
+  testimonials,
+  faqItems,
 } from "@/lib/content/landing-content";
 
 export default async function Home() {
@@ -23,6 +27,8 @@ export default async function Home() {
       <main>
         <HeroSection content={heroContent} isAuthenticated={isAuthenticated} />
         <UspSection items={reasons} />
+        <TestimonialsSection items={testimonials} />
+        <FaqSection items={faqItems} />
       </main>
 
       <SiteFooter links={footerLinks} />

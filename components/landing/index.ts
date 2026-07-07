@@ -6,3 +6,4 @@ export { ServicesSection } from "@/components/landing/ServicesSection";
 export { SiteFooter } from "@/components/landing/SiteFooter";
 export { SiteHeader } from "@/components/landing/SiteHeader";
 export { UspSection } from "@/components/landing/UspSection";
+export { TestimonialsSection } from "@/components/landing/TestimonialsSection";
