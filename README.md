@@ -22,23 +22,46 @@
 
 ---
 
-## 🚀 Something Big is Launching! Stay Tuned!
+## 🌟 What is KRedex?
 
-We are building the future of decentralized peer-to-peer (P2P) lending and borrowing. **KRedex** leverages on-chain behavior and smart contract automation to make capital access secure, easy, and transparent.
+Traditional credit rails are broken, leaving millions of individuals globally without access to fair financing. **KRedex** resolves this by introducing a decentralized, reputation-based micro-lending model natively built on **Stellar & Soroban**.
 
-### 🌟 What is KRedex?
-Traditional credit rails are broken, leaving millions of individuals globally without access to fair financing. KRedex resolves this by introducing a decentralized, reputation-based micro-lending model on Stellar & Soroban.
+By leveraging on-chain reputation rather than over-collateralization, KRedex enables true uncollateralized lending while protecting lenders via smart-contract escrow, automated default management, and liquidity incentives.
 
-- **Reputation-First Credit**: Leverage on-chain activities and history instead of traditional collateral.
-- **Secure P2P Matching**: Directly connect borrowers with lending liquidity pools under auditable, code-enforced rules.
-- **Escrow-Backed Safety**: Protect capital with escrow accounts, default management mechanics, and trust-critical safety controls.
+---
+
+## 🔥 Key Features (Latest Version)
+
+### ⛓️ On-Chain Reputation & Credit Scoring
+- **Dynamic Scoring**: Borrowers earn reputation points for on-time repayments and lose points for late payments or defaults, all tracked natively in a Soroban smart contract.
+- **Public API (`/api/reputation/[address]`)**: The reputation system acts as a public good. Any Stellar protocol or dApp can query a wallet's KRedex score via a CORS-open, Redis-cached API.
+
+### 🏅 Soulbound NFT Badges
+- Borrowers who reach Elite status (Gold / Platinum) are awarded **Soulbound NFTs**.
+- The `reputation_nft` Soroban contract enforces non-transferability at the chain level (`transfer()` panics). 
+- Beautiful animated badge components natively integrate into the borrower profile.
+
+### 💸 Stellar Disbursement Platform (SDP)
+- **Batch Payouts**: Admins can fund up to **500 approved loans at once** using the SDP engine.
+- Groups transactions into 100-operation chunks, signs server-side via a treasury key, and provides automated exponential-backoff retries and comprehensive audit logging.
+
+### 🪪 SEP-12 KYC Integration
+- **Compliance out-of-the-box**: Acts as a native KYC server following the Stellar SEP-12 standard.
+- Verifying your identity on Kredex makes you compliant across the entire Stellar ecosystem.
+
+### 💧 Aquarius (AQUA) Liquidity Incentives
+- Lenders earn **AQUA tokens** on top of standard APY for providing liquidity to specific lending pools, driving deep liquidity for borrowers.
+
+### 🔐 Passwordless & Wallet Authentication
+- Log in seamlessly using a biometric **Passkey** or by signing a secure challenge via your **Freighter Wallet**. No passwords to remember or lose.
 
 ---
 
 ## 🛠️ Technology Stack
 - **Frontend:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4
-- **Auth & Database:** Supabase Auth, PostgreSQL, Supabase RLS
-- **Smart Contracts:** Soroban Smart Contracts (Rust), compiled to WASM
+- **Backend & Database:** Supabase Auth, PostgreSQL, Supabase RLS, Redis (Upstash)
+- **Smart Contracts:** Soroban Smart Contracts (Rust) compiled to WASM
+- **Blockchain:** Stellar Testnet / Mainnet
 
 ---
 
@@ -46,23 +69,33 @@ Traditional credit rails are broken, leaving millions of individuals globally wi
 
 ### 1) Prerequisites
 - Node.js 18+
-- Rust toolchain
-- Stellar CLI
+- Rust toolchain (`rustup target add wasm32-unknown-unknown`)
+- [Stellar CLI](https://developers.stellar.org/docs/build/smart-contracts/getting-started/setup)
 
-### 2) Install dependencies
+### 2) Install Dependencies
 ```bash
 npm install
 ```
 
-### 3) Start development server
-```bash
-npm run dev
-```
+### 3) Environment Variables
+Copy `.env.example` to `.env.local` and fill in your Supabase, Redis, and Stellar credentials.
 
-### 4) Production build and lint
+### 4) Run the Application
 ```bash
+# Start Next.js development server
+npm run dev
+
+# Production build and lint
 npm run build
 npm run lint
+```
+
+### 5) Smart Contracts
+To build and deploy the Soroban contracts to the Stellar Testnet:
+```bash
+cd contracts
+cargo build --target wasm32-unknown-unknown --release
+# Deploy using Stellar CLI or the included deploy.ps1 script
 ```
 
 ---
@@ -70,15 +103,19 @@ npm run lint
 ## 📂 Project Structure
 ```text
 kredex/
-├─ app/                    # Next.js App Router pages, APIs, and actions
-├─ components/             # Reusable UI, layouts, and landing page components
+├─ app/                    # Next.js App Router (Pages, APIs, Server Actions)
+├─ components/             # React UI components and layouts
 ├─ contracts/              # Soroban smart contracts (Rust)
-├─ lib/                    # Supabase, Stellar SDK, and contract helper clients
-├─ public/                 # Static assets (logos, icons)
-├─ sql/                    # Supabase database schema and RLS policies
-└─ types/                  # Shared TypeScript type definitions
+│  ├─ borrower_reputation/ # Reputation scoring logic
+│  ├─ reputation_nft/      # Soulbound NFT badges
+│  ├─ lending/             # Core loan logic
+│  ├─ escrow/              # Funds security
+│  └─ default_management/  # Liquidation & insurance
+├─ lib/                    # SDKs (Stellar, Soroban, Supabase, Redis, KYC)
+├─ sql/                    # DB Migrations & RLS policies
+└─ types/                  # Shared TypeScript models
 ```
 
 ---
 
-Done with ❤️ by KRedex Team. Stay tuned for our mainnet release!
+*Done with ❤️ by the KRedex Team.*
