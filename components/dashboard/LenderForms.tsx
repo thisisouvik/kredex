@@ -7,6 +7,7 @@ interface PoolOption {
   id: string;
   name: string;
   apr_bps: number;
+  aqua_apr_bps?: number;
   available_liquidity: number;
 }
 
@@ -84,6 +85,21 @@ export function DepositForm({ pools, onSubmit }: DepositFormProps) {
           disabled={loading}
           suppressHydrationWarning
         />
+        {selectedPool && amount && parseFloat(amount) > 0 && (
+          <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: "8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+              Projected Annual Earnings:
+            </p>
+            <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.85rem", fontWeight: 600, color: "#22cf9d" }}>
+              + {((parseFloat(amount) * Number(selectedPool.apr_bps)) / 10000).toFixed(2)} XLM
+            </p>
+            {selectedPool.aqua_apr_bps && (
+              <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.85rem", fontWeight: 600, color: "#38bdf8" }}>
+                + {((parseFloat(amount) * Number(selectedPool.aqua_apr_bps)) / 10000).toFixed(2)} AQUA
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && <p className="workspace-error">{error}</p>}

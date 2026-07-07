@@ -17,12 +17,12 @@ export default async function LenderPoolsPage() {
     ? await Promise.all([
         supabase
           .from("lending_pools")
-          .select("id, name, status, apr_bps, total_liquidity, available_liquidity")
+          .select("id, name, status, apr_bps, aqua_apr_bps, total_liquidity, available_liquidity")
           .order("created_at", { ascending: false })
           .limit(8),
         supabase
           .from("pool_positions")
-          .select("id, pool_id, status, principal_amount, earned_interest, opened_at")
+          .select("id, pool_id, status, principal_amount, earned_interest, earned_aqua, opened_at")
           .eq("lender_id", user.id)
           .order("opened_at", { ascending: true }),
         supabase
@@ -47,6 +47,7 @@ export default async function LenderPoolsPage() {
 
   const totalDeployed = positions.reduce((s, p) => s + Number(p.principal_amount ?? 0), 0);
   const totalEarned   = positions.reduce((s, p) => s + Number(p.earned_interest   ?? 0), 0);
+  const totalEarnedAqua = positions.reduce((s, p) => s + Number(p.earned_aqua   ?? 0), 0);
 
   // Generate cumulative portfolio growth data for the interactive chart based on pool positions
   let cumulativeValue = 0;
@@ -91,13 +92,14 @@ export default async function LenderPoolsPage() {
             {[
               { label: "Your Total Deployed", value: `${totalDeployed.toFixed(2)} XLM` },
               { label: "Total Interest Earned", value: `${totalEarned.toFixed(4)} XLM`, green: true },
+              { label: "AQUA Earned", value: `${totalEarnedAqua.toFixed(4)} AQUA`, blue: true },
               { label: "Active Positions", value: String(positions.filter((p) => p.status === "active").length) },
             ].map((stat) => (
               <article key={stat.label} className="workspace-card" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <p style={{ fontSize: "0.78rem", opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.35rem" }}>
                   {stat.label}
                 </p>
-                <p style={{ fontSize: "1.6rem", fontWeight: 700, color: stat.green ? "#22cf9d" : "inherit" }}>
+                <p style={{ fontSize: "1.6rem", fontWeight: 700, color: stat.green ? "#22cf9d" : stat.blue ? "#38bdf8" : "inherit" }}>
                   {stat.value}
                 </p>
               </article>
@@ -133,9 +135,18 @@ export default async function LenderPoolsPage() {
                 <tbody>
                   {pools.map((pool) => {
                     const myPos = positions.find((p) => String(p.pool_id) === String(pool.id));
+                    const baseApr = (Number(pool.apr_bps ?? 0) / 100).toFixed(2);
+                    const aquaApr = pool.aqua_apr_bps ? (Number(pool.aqua_apr_bps) / 100).toFixed(2) : null;
                     return (
                       <tr key={String(pool.id)}>
-                        <td><strong>{String(pool.name)}</strong></td>
+                        <td>
+                          <strong>{String(pool.name)}</strong>
+                          {aquaApr && (
+                            <span style={{ marginLeft: "0.5rem", fontSize: "0.7rem", background: "rgba(56,189,248,0.15)", color: "#38bdf8", padding: "0.1rem 0.4rem", borderRadius: "4px", fontWeight: 700 }}>
+                              💧 AQUA BOOST
+                            </span>
+                          )}
+                        </td>
                         <td>
                           <span style={{
                             padding: "0.15rem 0.5rem", borderRadius: "9999px",
@@ -146,7 +157,14 @@ export default async function LenderPoolsPage() {
                             {String(pool.status).toUpperCase()}
                           </span>
                         </td>
-                        <td>{(Number(pool.apr_bps ?? 0) / 100).toFixed(2)}%</td>
+                        <td>
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            <span>{baseApr}% <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>Base</span></span>
+                            {aquaApr && (
+                              <span style={{ color: "#38bdf8", fontSize: "0.85rem", fontWeight: 600 }}>+{aquaApr}% AQUA</span>
+                            )}
+                          </div>
+                        </td>
                         <td>{formatCurrency(Number(pool.total_liquidity ?? 0))}</td>
                         <td>{Number(pool.available_liquidity ?? 0).toFixed(2)} XLM</td>
                         <td style={{ color: myPos ? "#22cf9d" : "inherit", fontWeight: myPos ? 600 : 400 }}>
