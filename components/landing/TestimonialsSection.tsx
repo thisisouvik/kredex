@@ -21,9 +21,6 @@ export function TestimonialsSection({ items }: TestimonialsSectionProps) {
                   src={item.avatar}
                   alt={item.name}
                   className="testimonial-avatar"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "https://ui-avatars.com/api/?name=" + encodeURIComponent(item.name) + "&background=6366F1&color=fff";
-                  }}
                 />
                 <div>
                   <h3 className="heading-md">{item.name}</h3>

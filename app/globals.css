@@ -1524,6 +1524,10 @@ input, select, textarea { font: inherit; }
 .grid { display: grid; }
 @media (min-width: 640px) { .sm\:grid-cols-2 { grid-template-columns: repeat(2, 1fr); } }
 .py-14 { padding-block: 3.5rem; }
+.py-20 { padding-block: 5rem; }
+.mt-8 { margin-top: 2rem; }
+.mt-10 { margin-top: 2.5rem; }
+.mb-12 { margin-bottom: 3rem; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MARKETING SECTIONS (Testimonials, FAQ, P2P, How it works)

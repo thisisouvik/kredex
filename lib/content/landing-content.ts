@@ -150,18 +150,18 @@ export const testimonials: Testimonial[] = [
     name: "Kwame Osei",
     role: "Freelance Developer",
     review: "Kredex gave me the micro-loan I needed for a new laptop when banks refused because I lacked traditional credit history. Building reputation on-chain is a game changer.",
-    avatar: "https://i.pravatar.cc/150?u=a042581f4e29026704d",
+    avatar: "/assets/avatars/1.jpg",
   },
   {
     name: "Elena Rodriguez",
     role: "Small Business Owner",
     review: "I started lending my spare USDC on Kredex. The transparency of borrower reputation and the atomic P2P escrow gives me total peace of mind.",
-    avatar: "https://i.pravatar.cc/150?u=a04258a2462d826712d",
+    avatar: "/assets/avatars/2.jpg",
   },
   {
     name: "David Chen",
     role: "Digital Nomad",
     review: "Borrowing in USDC without dealing with crypto volatility or needing collateral is exactly what I've been looking for. The passkey login makes it incredibly simple.",
-    avatar: "https://i.pravatar.cc/150?u=a042581f4e29026024d",
+    avatar: "/assets/avatars/3.jpg",
   },
 ];
