@@ -61,7 +61,7 @@ export function getPlatformTasks() {
       id:         "task_stellar_basics",
       title:      "Learn: How Stellar Payments Work",
       description:
-        "Read TrustLend's guide on how Stellar (XLM) enables fast, low-cost cross-border payments " +
+        "Read Kredex's guide on how Stellar (XLM) enables fast, low-cost cross-border payments " +
         "and how it's used to fund and repay loans on this platform.",
       category:   "Financial Literacy",
       points:     30,
@@ -73,7 +73,7 @@ export function getPlatformTasks() {
       id:         "task_credit_score",
       title:      "Learn: How Your Trust Score Is Calculated",
       description:
-        "Understand the 5 factors that build your TrustLend trust score: KYC verification, " +
+        "Understand the 5 factors that build your Kredex trust score: KYC verification, " +
         "on-time repayment, task completion, account age, and transaction history.",
       category:   "Platform Knowledge",
       points:     25,
@@ -85,7 +85,7 @@ export function getPlatformTasks() {
       id:         "task_defi_lending",
       title:      "Learn: DeFi Lending vs Traditional Banking",
       description:
-        "Explore the key differences between decentralised P2P lending (like TrustLend) and " +
+        "Explore the key differences between decentralised P2P lending (like Kredex) and " +
         "traditional bank loans — including how interest, collateral, and transparency work on-chain.",
       category:   "Financial Literacy",
       points:     35,

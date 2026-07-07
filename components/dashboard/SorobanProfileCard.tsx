@@ -19,7 +19,7 @@ export function SorobanProfileCard({ walletAddress }: SorobanProfileCardProps) {
       const exists = await ReputationContract.hasProfile(walletAddress, walletAddress);
       setProfileExists(exists);
     } catch (err) {
-      console.error("[TrustLend] Failed to check on-chain profile:", err);
+      console.error("[Kredex] Failed to check on-chain profile:", err);
       // We don't set error here to avoid blocking UI with noise
     }
   }, [walletAddress]);

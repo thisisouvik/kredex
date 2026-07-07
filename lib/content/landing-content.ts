@@ -12,32 +12,32 @@ import type {
 } from "@/types/landing";
 
 export const navItems: NavItem[] = [
-  { label: "Home", href: "#home" },
-  { label: "Introduce", href: "#introduce" },
-  { label: "Journey", href: "#journey" },
-  { label: "P2P", href: "#p2p" },
-  { label: "FAQ", href: "#faq" },
+  { label: "Home",      href: "#home" },
+  { label: "Features",  href: "#introduce" },
+  { label: "How it works", href: "#journey" },
+  { label: "P2P",      href: "#p2p" },
+  { label: "FAQ",       href: "#faq" },
 ];
 
 export const heroContent: HeroContent = {
-  eyebrow: "One network for two users",
+  eyebrow: "On-chain credit — for the real world",
   titleMain: "Borrow smarter.",
   titleAccent: "Lend with confidence.",
   description:
-    "TrustLend connects borrowers and lenders through behavior-based reputation and clear role-specific workflows.",
+    "Kredex connects borrowers and lenders through behaviour-based on-chain reputation and transparent P2P workflows — powered by Stellar and Circle USDC.",
 };
 
 export const metrics: MetricItem[] = [
-  { value: "$110B+", label: "Potential lending volume" },
-  { value: "15M+", label: "Emerging market freelancers" },
-  { value: "98.5%", label: "Target repayment success" },
-  { value: "<2 Min", label: "Google or email onboarding" },
+  { value: "$110B+",  label: "Potential lending volume" },
+  { value: "15M+",   label: "Emerging market freelancers" },
+  { value: "98.5%",  label: "Target repayment success" },
+  { value: "<2 Min", label: "Passkey or wallet onboarding" },
 ];
 
 export const highlightContent: HighlightContent = {
   title: "Anytime, Anywhere",
   description:
-    "TrustLend helps users build reputation from real behavior and unlock fair capital without paperwork-heavy approval cycles.",
+    "Kredex helps users build reputation from real behaviour and unlock fair capital without paperwork-heavy approval cycles.",
   callout:
     "No paid tasks. No synthetic score farming. Just real financial trust that compounds with every healthy action.",
 };
@@ -45,27 +45,27 @@ export const highlightContent: HighlightContent = {
 export const processSteps: StepItem[] = [
   {
     step: "01",
-    title: "Choose role + sign in",
+    title: "Connect your wallet",
     description:
-      "Pick Borrower or Lender and enter with Google or email login in one flow.",
+      "Sign in with Face ID via Passkey, or use Freighter / Albedo. No password or email required.",
   },
   {
     step: "02",
-    title: "Connect your trust profile",
+    title: "Build your trust profile",
     description:
-      "Your profile starts with a baseline trust score and tracks all meaningful activity.",
+      "Your profile starts with a baseline reputation score and tracks every on-chain action automatically.",
   },
   {
     step: "03",
-    title: "Build reputation from behavior",
+    title: "Grow reputation through behaviour",
     description:
-      "Score grows through repayment consistency, lending participation, and transaction discipline.",
+      "Score grows through repayment consistency, lending participation, and on-chain transaction discipline.",
   },
   {
     step: "04",
-    title: "Access fair micro-loans",
+    title: "Access fair micro-loans in USDC",
     description:
-      "Borrowers unlock faster approvals while lenders allocate to transparent diversified pools.",
+      "Borrowers unlock faster approvals while lenders allocate to transparent, risk-adjusted P2P loans.",
   },
   {
     step: "05",
@@ -76,17 +76,18 @@ export const processSteps: StepItem[] = [
 ];
 
 export const reasons: ReasonItem[] = [
-  { title: "User-friendly credit access" },
-  { title: "24/7 transparent score updates" },
-  { title: "No collateral-first bias" },
-  { title: "Fast global transaction rails" },
-  { title: "Behavior-based risk controls" },
+  { title: "Passkey & biometric login — no seed phrase", description: "Sign in with Face ID or fingerprint. No 24-word recovery phrase. Powered by WebAuthn." },
+  { title: "24/7 transparent on-chain score updates", description: "Your reputation score lives on Stellar Soroban. It updates with every loan repaid or funded." },
+  { title: "No collateral required — behaviour is your credit", description: "Kredex evaluates your on-chain history, not your collateral. Fair for everyone." },
+  { title: "Circle USDC — no crypto price volatility", description: "All loans are denominated in USDC. Borrow and repay in stable dollar-pegged currency." },
+  { title: "Atomic P2P escrow — trustless by design", description: "Funds move directly between wallets via Soroban smart contracts. No middleman." },
+  { title: "KYC tiers unlock higher limits", description: "Start at $50 USDC with zero KYC. Verify your identity to unlock $500 and $5,000 limits." },
 ];
 
 export const aboutContent: AboutContent = {
-  title: "Conduct P2P transactions in just 3 steps",
+  title: "P2P lending in 3 transparent steps",
   description:
-    "A clear flow gives both sides confidence: borrowers request with trust context, lenders confirm with transparent signals, and payouts settle quickly.",
+    "A clear flow gives both sides confidence: borrowers request with trust context, lenders commit with transparent signals, and funds settle atomically on-chain.",
 };
 
 export const p2pSteps: P2PStep[] = [
@@ -94,53 +95,53 @@ export const p2pSteps: P2PStep[] = [
     step: "1",
     title: "Place request with trust profile",
     description:
-      "Borrowers submit amount and purpose, and lenders instantly view behavior-based reputation data.",
+      "Borrowers submit amount and purpose. Lenders instantly view behaviour-based reputation data, KYC tier, and repayment history.",
   },
   {
     step: "2",
-    title: "Confirm terms and repayment plan",
+    title: "Confirm terms and escrow",
     description:
-      "Both sides lock terms clearly with expected duration and transparent repayment checkpoints.",
+      "Both sides lock terms clearly. USDC is atomically transferred to the escrow smart contract — no trust required.",
   },
   {
     step: "3",
     title: "Unlock capital and track lifecycle",
     description:
-      "Funds are released and every repayment milestone updates trust signals for future access.",
+      "Funds are disbursed and every repayment milestone updates trust signals for future access — transparently on-chain.",
   },
 ];
 
 export const faqItems: FaqItem[] = [
   {
-    question: "What is TrustLend?",
+    question: "What is Kredex?",
     answer:
-      "TrustLend is a reputation-based micro-lending platform where creditworthiness is driven by real financial behavior, not collateral or paid tasks.",
+      "Kredex is a reputation-based micro-lending platform where creditworthiness is driven by real on-chain financial behaviour, not collateral or paid tasks. All loans are settled in Circle USDC on Stellar.",
   },
   {
-    question: "Do I need to create an account with email and password?",
+    question: "Do I need a crypto wallet or seed phrase?",
     answer:
-      "You can use either Google sign-in or classic email and password. Both support borrower and lender role selection.",
+      "No seed phrase needed. You can sign in with a Passkey (Face ID / fingerprint) directly in your browser. Freighter and Albedo are also supported for desktop users.",
   },
   {
-    question: "How is reputation calculated?",
+    question: "How is the reputation score calculated?",
     answer:
-      "The score primarily reflects repayment history, lending activity, transaction consistency, and verified external financial signals.",
+      "The score is stored on Stellar Soroban and reflects repayment history, lending activity, transaction consistency, and KYC tier. It updates automatically after every on-chain event.",
   },
   {
-    question: "How does TrustLend differ from typical DAO lending platforms?",
+    question: "What currency are loans in?",
     answer:
-      "Most DAO platforms rely on collateral-heavy crypto-native flows. TrustLend is built for real-world freelancers and unbanked users using behavior-based trust.",
+      "All loans are denominated in Circle USDC — a dollar-pegged stablecoin. On testnet, both USDC and XLM are supported. On mainnet, USDC will be the sole currency.",
   },
   {
     question: "Can lenders monitor risk transparently?",
     answer:
-      "Yes. Lenders can inspect borrower trust signals, repayment progression, and pool-level outcomes with transparent data visibility.",
+      "Yes. Lenders can inspect borrower reputation scores, KYC tiers, repayment progression, and escrow status — all on-chain with full transparency.",
   },
 ];
 
 export const footerLinks: FooterLink[] = [
-  { label: "Introduce", href: "#introduce" },
-  { label: "Journey", href: "#journey" },
-  { label: "P2P", href: "#p2p" },
-  { label: "FAQ", href: "#faq" },
+  { label: "Features",     href: "#introduce" },
+  { label: "How it works", href: "#journey" },
+  { label: "P2P",         href: "#p2p" },
+  { label: "FAQ",          href: "#faq" },
 ];

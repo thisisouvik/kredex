@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { NotificationWidget } from "./NotificationWidget";
+import {
+  LayoutDashboard, CreditCard, History, User, Settings,
+  TrendingUp, Briefcase, ShoppingBag, Shield
+} from "lucide-react";
 
 interface WorkspaceLink {
   href: string;
@@ -34,6 +38,20 @@ interface WorkspaceFrameProps {
   children?: React.ReactNode;
 }
 
+// Map link labels to icons
+function getIcon(label: string) {
+  const l = label.toLowerCase();
+  if (l.includes("overview") || l.includes("home") || l.includes("dashboard")) return LayoutDashboard;
+  if (l.includes("loan") || l.includes("borrow") || l.includes("apply")) return CreditCard;
+  if (l.includes("repay")) return TrendingUp;
+  if (l.includes("history")) return History;
+  if (l.includes("market") || l.includes("browse")) return ShoppingBag;
+  if (l.includes("portfolio") || l.includes("fund")) return Briefcase;
+  if (l.includes("kyc") || l.includes("verify")) return Shield;
+  if (l.includes("profile") || l.includes("setting")) return Settings;
+  return User;
+}
+
 export function WorkspaceFrame({
   roleLabel,
   heading,
@@ -49,20 +67,20 @@ export function WorkspaceFrame({
   children,
 }: WorkspaceFrameProps) {
   const resolvedPath = currentPath ?? links[0]?.href ?? "/dashboard";
-  const resolvedProfilePath = profilePath ?? links.find((item) => /profile|settings/i.test(item.label))?.href ?? links[0]?.href ?? "/dashboard";
-  const displayName = userName && userName.trim() !== "" ? userName.trim() : "User";
-  
-  // Only use provided profileSummary - don't fall back to dummy data.
-  // If no summary is provided, the alert section is suppressed entirely.
+  const resolvedProfilePath =
+    profilePath ??
+    links.find((item) => /profile|settings/i.test(item.label))?.href ??
+    links[0]?.href ??
+    "/dashboard";
+  const displayName =
+    userName && userName.trim() !== "" ? userName.trim() : "User";
+
   const resolvedProfileSummary = profileSummary ?? null;
 
   const normalizedLinks = (() => {
     const seen = new Set<string>();
     return links.filter((item) => {
-      if (seen.has(item.href)) {
-        return false;
-      }
-
+      if (seen.has(item.href)) return false;
       seen.add(item.href);
       return true;
     });
@@ -70,30 +88,43 @@ export function WorkspaceFrame({
 
   const metricColumns = metrics.length === 4 ? 4 : metrics.length || 1;
 
+  const isBorrower = roleLabel.toLowerCase().includes("borrow");
+
   return (
     <main className="role-dashboard-shell">
-      <section className="role-dashboard-card role-dashboard-card--wide">
+      <div className="role-dashboard-card role-dashboard-card--wide">
         <div className="workspace-layout">
+
+          {/* ── Sidebar ──────────────────────────────────────────────── */}
           <aside className="workspace-sidebar" aria-label="Dashboard sidebar">
+            {/* Brand */}
             <div className="workspace-brand-wrap">
               <Link href="/" className="workspace-brand font-display">
-                TrustLend
+                <div className="workspace-brand-orb">K</div>
+                Kredex
               </Link>
               <p className="workspace-sidebar-kicker">{roleLabel}</p>
             </div>
 
+            {/* Nav */}
             <nav className="workspace-sidebar-nav" aria-label={`${roleLabel} navigation`}>
-              {normalizedLinks.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`workspace-sidebar-link ${resolvedPath === item.href ? "workspace-sidebar-link--active" : ""}`}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {normalizedLinks.map((item) => {
+                const Icon = getIcon(item.label);
+                const isActive = resolvedPath === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`workspace-sidebar-link ${isActive ? "workspace-sidebar-link--active" : ""}`}
+                  >
+                    <Icon size={15} style={{ opacity: isActive ? 1 : 0.6, flexShrink: 0 }} />
+                    {item.label}
+                  </Link>
+                );
+              })}
             </nav>
 
+            {/* KYC / Profile Alert */}
             {showProfileAlert && resolvedProfileSummary ? (
               <section className="premium-alert" aria-live="polite">
                 <p className="premium-alert-badge">Action Required</p>
@@ -103,7 +134,9 @@ export function WorkspaceFrame({
                   </span>
                   <p className="premium-alert-title">Profile & KYC</p>
                 </div>
-                <p className="workspace-profile-warning">Complete your profile to unlock all dashboard actions.</p>
+                <p className="workspace-profile-warning">
+                  Complete your profile to unlock all actions.
+                </p>
                 <p className="workspace-profile-copy">{resolvedProfileSummary.warningText}</p>
 
                 <div
@@ -117,7 +150,7 @@ export function WorkspaceFrame({
                 >
                   <span style={{ width: `${resolvedProfileSummary.completion}%` }} />
                 </div>
-                <p style={{ fontSize: "0.72rem", opacity: 0.65, marginBottom: "0.5rem" }}>
+                <p style={{ fontSize: "0.72rem", opacity: 0.65, marginBottom: "0.5rem", color: "var(--text-muted)" }}>
                   {resolvedProfileSummary.completion}% complete
                 </p>
 
@@ -130,13 +163,15 @@ export function WorkspaceFrame({
                 )}
 
                 <Link href={resolvedProfilePath} className="premium-alert-btn">
-                  Complete Profile Now
+                  Complete Profile
                 </Link>
               </section>
             ) : null}
           </aside>
 
+          {/* ── Main panel ───────────────────────────────────────────── */}
           <div className="workspace-main-panel">
+            {/* Topbar */}
             <header className="workspace-topbar">
               <div>
                 <h1 className="font-display role-title">{heading}</h1>
@@ -145,13 +180,21 @@ export function WorkspaceFrame({
               <div className="workspace-header-widget" aria-label="Dashboard controls">
                 {headerWidget ?? (
                   <div className="workspace-top-actions">
-                       <span className="workspace-chip">{displayName}</span>
-                      <NotificationWidget />
+                    <span className="workspace-chip">
+                      <span style={{
+                        width: 7, height: 7, borderRadius: "50%",
+                        background: isBorrower ? "var(--indigo-light)" : "var(--teal-light)",
+                        flexShrink: 0,
+                      }} />
+                      {displayName}
+                    </span>
+                    <NotificationWidget />
                   </div>
                 )}
               </div>
             </header>
 
+            {/* Metrics */}
             <div
               className={`role-metrics ${metrics.length === 4 ? "role-metrics--four" : ""}`}
               style={{ ["--metric-columns" as string]: String(metricColumns) }}
@@ -164,10 +207,13 @@ export function WorkspaceFrame({
               ))}
             </div>
 
-            {children ? <section className="workspace-content">{children}</section> : null}
+            {/* Content */}
+            {children ? (
+              <section className="workspace-content">{children}</section>
+            ) : null}
           </div>
         </div>
-      </section>
+      </div>
     </main>
   );
 }

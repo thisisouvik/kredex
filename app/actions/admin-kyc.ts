@@ -77,7 +77,7 @@ export async function verifyKYCDocument(
       }
 
       console.log(
-        `[TrustLend] Reputation snapshot seeded for ${userId}: score=${initialScore}`
+        `[Kredex] Reputation snapshot seeded for ${userId}: score=${initialScore}`
       );
     }
 

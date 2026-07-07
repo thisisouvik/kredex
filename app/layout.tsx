@@ -1,45 +1,54 @@
 import type { Metadata } from "next";
-import { Manrope, Sora } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const manrope = Manrope({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-manrope",
+  variable: "--font-inter",
+  display: "swap",
 });
 
-const sora = Sora({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-sora",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
-  title: "TrustLend — Reputation-Based Micro-Lending for Everyone",
+  title: "Kredex — Reputation-Based Micro-Lending on Stellar",
   description:
-    "TrustLend is a decentralized micro-lending marketplace that empowers unbanked gig workers and freelancers in emerging markets to access credit based on real financial behavior — not collateral or credit history.",
+    "Kredex is a decentralized micro-lending marketplace on Stellar that empowers gig workers and freelancers in emerging markets to access credit based on real financial behavior — not collateral or credit history.",
   keywords: [
-    "TrustLend",
+    "Kredex",
     "micro-lending",
     "DeFi",
     "blockchain",
     "Stellar",
+    "Soroban",
     "reputation score",
     "unbanked",
     "gig economy",
+    "USDC lending",
     "crypto lending",
   ],
-  authors: [{ name: "TrustLend" }],
+  authors: [{ name: "Kredex" }],
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",
     apple: "/logo.png",
   },
   openGraph: {
-    title: "TrustLend — Reputation-Based Micro-Lending",
+    title: "Kredex — Reputation-Based Micro-Lending",
     description:
       "Access credit based on real financial behavior. 1.7 billion unbanked adults deserve better.",
     type: "website",
-    images: [{ url: "/logo.png", width: 512, height: 512, alt: "TrustLend Logo" }],
+    images: [{ url: "/logo.png", width: 512, height: 512, alt: "Kredex Logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Kredex — Reputation-Based Micro-Lending",
+    description: "Decentralized micro-lending powered by on-chain reputation. Built on Stellar.",
   },
 };
 
@@ -50,7 +59,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full" data-scroll-behavior="smooth">
-      <body className={`${manrope.variable} ${sora.variable} flex min-h-full flex-col antialiased`}>
+      <body
+        className={`${inter.variable} ${spaceGrotesk.variable} flex min-h-full flex-col antialiased`}
+        style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}
+      >
         {children}
       </body>
     </html>

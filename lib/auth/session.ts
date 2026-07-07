@@ -2,11 +2,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'trustlend-super-secret-jwt-key-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET || 'Kredex-super-secret-jwt-key-change-in-prod';
 
 export async function requireAuthenticatedUser(expectedRole?: string) {
   const cookieStore = await cookies();
-  const token = cookieStore.get("trustlend_session")?.value;
+  const token = cookieStore.get("Kredex_session")?.value;
 
   if (!token) {
     redirect("/auth");

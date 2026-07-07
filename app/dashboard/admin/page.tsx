@@ -136,7 +136,7 @@ export default async function AdminDashboardPage() {
     <WorkspaceFrame
       roleLabel="Trade Vault Admin"
       heading="Control Panel"
-      description="Monitor platform health, credit activity, and security posture across TrustLend operations."
+      description="Monitor platform health, credit activity, and security posture across Kredex operations."
       email={user.email ?? null}
       userName={String(user.user_metadata?.full_name ?? "Admin")}
       metrics={presentAdminMetrics(metrics)}

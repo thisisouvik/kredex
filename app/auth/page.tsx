@@ -3,8 +3,8 @@ import { AuthPageClient } from "@/components/auth/AuthPageClient";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Sign in — TrustLend",
-  description: "Sign in or create your TrustLend account as a borrower or lender.",
+  title: "Sign in — Kredex",
+  description: "Sign in or create your Kredex account as a borrower or lender.",
 };
 
 export default function AuthPage() {

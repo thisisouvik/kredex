@@ -183,7 +183,7 @@ export function AuthAccessButton({ className, buttonLabel = "Sign in" }: AuthAcc
             className="auth-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Sign in to TrustLend"
+            aria-label="Sign in to Kredex"
             onClick={(event) => event.stopPropagation()}
           >
             <button type="button" className="auth-close" onClick={closeModal} aria-label="Close">

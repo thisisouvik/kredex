@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TransactionBuilder, Keypair, Networks, Transaction } from "@stellar/stellar-sdk";
 
 /**
- * TrustLend Advanced Feature: Fee Sponsorship (Gasless Transactions)
+ * Kredex Advanced Feature: Fee Sponsorship (Gasless Transactions)
  * This endpoint allows the platform (Treasury) to sponsor transaction fees for borrowers.
  * By wrapping the user's signed transaction in a FeeBumpTransaction, the platform pays the gas,
  * enabling true "gasless" experiences for users without XLM balances.

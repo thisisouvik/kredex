@@ -1,5 +1,5 @@
 /**
- * Passkey Wallet — Native WebAuthn Implementation for TrustLend
+ * Passkey Wallet — Native WebAuthn Implementation for Kredex
  *
  * Uses the browser's built-in WebAuthn API (Face ID / Touch ID / fingerprint).
  * No seed phrase. No extension required. Works on all modern mobile browsers.
@@ -13,8 +13,8 @@
  * The `credentialId` is stored in localStorage to identify returning users.
  */
 
-const CREDENTIAL_STORAGE_KEY = "trustlend_passkey_credential_id";
-const RP_NAME = "TrustLend";
+const CREDENTIAL_STORAGE_KEY = "Kredex_passkey_credential_id";
+const RP_NAME = "Kredex";
 
 /** Returns true only when WebAuthn with platform authenticator is available */
 export async function isPasskeySupported(): Promise<boolean> {
@@ -54,7 +54,7 @@ function base64UrlDecode(str: string): ArrayBuffer {
 export interface PasskeyRegistrationResult {
   credentialId: string;          // base64url — unique device credential identifier
   publicKeyBase64: string;       // base64url — raw COSE public key bytes
-  walletHandle: string;          // "pk_<credentialId_prefix>" — used as wallet address in TrustLend
+  walletHandle: string;          // "pk_<credentialId_prefix>" — used as wallet address in Kredex
 }
 
 /**

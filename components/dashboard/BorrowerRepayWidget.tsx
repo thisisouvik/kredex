@@ -88,7 +88,7 @@ function SuccessOverlay({ data, onClose }: { data: SuccessData; onClose: () => v
         </div>
 
         <p style={{ marginTop: "1rem", fontSize: "0.75rem", color: "#9ca3af" }}>
-          📋 Repayment recorded in TrustLend ledger. Your trust score has been updated.
+          📋 Repayment recorded in Kredex ledger. Your trust score has been updated.
         </p>
       </div>
       <style>{`
@@ -246,7 +246,7 @@ export function BorrowerRepayWidget({ loan, dueAmount: initialDue }: { loan: Rep
       }
       const txHash: string = submitData.hash;
 
-      // 6. Record on TrustLend
+      // 6. Record on Kredex
       setStep("recording");
       const apiRes = await fetch("/api/loans/repay", {
         method: "POST",

@@ -247,7 +247,7 @@ export function BorrowerForms({
           setTimeout(() => reject(new Error("Soroban RPC timeout")), 5000)
         );
         try {
-          console.log("[TrustLend] Initiating Soroban loan request...");
+          console.log("[Kredex] Initiating Soroban loan request...");
 
           const [onChainRate, onChainMax] = await Promise.race([
             Promise.all([
@@ -267,9 +267,9 @@ export function BorrowerForms({
             onChainMax
           );
 
-          console.log("[TrustLend] Soroban loan request recorded.");
+          console.log("[Kredex] Soroban loan request recorded.");
         } catch (sorobanErr) {
-          console.warn("[TrustLend] Soroban sync skipped:", (sorobanErr as Error).message);
+          console.warn("[Kredex] Soroban sync skipped:", (sorobanErr as Error).message);
         }
       }
 

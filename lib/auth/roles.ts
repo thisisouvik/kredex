@@ -1,7 +1,7 @@
 export type UserRole = "borrower" | "lender" | "admin";
 
 export const DEFAULT_ROLE: UserRole = "borrower";
-export const PENDING_ROLE_KEY = "trustlend_pending_role";
+export const PENDING_ROLE_KEY = "Kredex_pending_role";
 
 export function isUserRole(value: unknown): value is UserRole {
   return value === "borrower" || value === "lender";

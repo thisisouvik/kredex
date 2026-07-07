@@ -1,5 +1,5 @@
 /**
- * KYC Tier Loan Limits for TrustLend
+ * KYC Tier Loan Limits for Kredex
  *
  * Amounts are in USDC (human-readable).
  * On-chain storage uses stroops (1 USDC = 10_000_000 stroops).

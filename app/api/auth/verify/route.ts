@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'trustlend-super-secret-jwt-key-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET || 'Kredex-super-secret-jwt-key-change-in-prod';
 
 export async function POST(req: Request) {
   try {
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     );
 
     (await cookies()).set({
-      name: 'trustlend_session',
+      name: 'Kredex_session',
       value: token,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

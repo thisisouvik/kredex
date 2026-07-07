@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { DirectFundForm } from "./DirectFundForm";
+import { Shield, Clock, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface MarketplaceLoan {
   id: string;
@@ -18,37 +19,36 @@ interface LoanMarketplaceProps {
   lenderWallet: string | null;
 }
 
-function TrustBadge({ score }: { score: number }) {
-  // TrustLend score range: 0-750
-  // Green  >= 200 : Good standing (default new users start at 250)
-  // Yellow >= 100 : Fair / limited history
-  // Red    < 100  : High risk / new with no history
-  const color =
-    score >= 200 ? "#22cf9d" :
-    score >= 100 ? "#f5a623" :
-    "#ff6b6b";
-  const label =
-    score >= 200 ? "🟢" :
-    score >= 100 ? "🟡" :
-    "🔴";
+function RepScoreBadge({ score }: { score: number }) {
+  const tier =
+    score >= 500 ? { label: "Gold",     color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.25)"  } :
+    score >= 200 ? { label: "Silver",   color: "#818CF8", bg: "rgba(129,140,248,0.12)", border: "rgba(129,140,248,0.25)" } :
+    score >= 100 ? { label: "Beginner", color: "#14B8A6", bg: "rgba(20,184,166,0.12)",  border: "rgba(20,184,166,0.25)"  } :
+                   { label: "None",     color: "#4A5568", bg: "rgba(74,85,104,0.12)",   border: "rgba(74,85,104,0.25)"   };
   return (
-    <span
-      title={`Trust score: ${score}/750`}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.3rem",
-        padding: "0.2rem 0.6rem",
-        borderRadius: "9999px",
-        fontSize: "0.75rem",
-        fontWeight: 700,
-        background: `${color}1a`,
-        color,
-        border: `1px solid ${color}44`,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label} {score}
+    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: "0.3rem",
+        padding: "0.2rem 0.65rem",
+        borderRadius: 999, fontSize: "0.72rem", fontWeight: 700,
+        background: tier.bg, color: tier.color,
+        border: `1px solid ${tier.border}`,
+      }}>
+        <Shield size={10} />
+        {tier.label}
+      </span>
+      <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+        {score}
+      </span>
+    </div>
+  );
+}
+
+function EstReturn({ principal, aprBps, days }: { principal: number; aprBps: number; days: number }) {
+  const interest = ((principal * (aprBps / 10000) * days) / 365).toFixed(2);
+  return (
+    <span style={{ color: "var(--teal-light)", fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif" }}>
+      +{interest} <span style={{ fontSize: "0.7rem", opacity: 0.7, fontFamily: "inherit" }}>USDC</span>
     </span>
   );
 }
@@ -58,124 +58,139 @@ export function LoanMarketplace({ loans, lenderWallet: _lenderWallet }: LoanMark
 
   if (loans.length === 0) {
     return (
-      <div
-        style={{
-          textAlign: "center",
-          padding: "2rem",
-          opacity: 0.55,
-          border: "1px dashed rgba(255,255,255,0.1)",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <p style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>🎉 All loans are funded!</p>
-        <p style={{ fontSize: "0.85rem" }}>No open loan requests right now. Check back soon.</p>
+      <div style={{
+        textAlign: "center", padding: "3rem 2rem",
+        border: "1px dashed var(--border-strong)", borderRadius: "var(--radius-lg)",
+        background: "var(--bg-card)",
+      }}>
+        <div style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>🎉</div>
+        <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text-primary)", marginBottom: "0.4rem" }}>All caught up!</p>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>No open loan requests right now. Check back soon.</p>
       </div>
     );
   }
 
   return (
-    <div className="workspace-table-wrap">
-      <table className="workspace-table" aria-label="Open loan requests marketplace">
-        <thead>
-          <tr>
-            <th>Loan ID</th>
-            <th>Borrower</th>
-            <th>Trust Score</th>
-            <th>Amount</th>
-            <th>APR</th>
-            <th>Duration</th>
-            <th>Est. Return</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loans.map((loan) => {
-            const interestXlm = (
-              (loan.principal_amount * (loan.apr_bps / 10000) * loan.duration_days) / 365
-            ).toFixed(2);
-            const isExpanded = expandedId === loan.id;
-            const hasWallet  = Boolean(loan.borrower_wallet);
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      {loans.map((loan) => {
+        const isExpanded = expandedId === loan.id;
+        const hasWallet = Boolean(loan.borrower_wallet);
+        const apr = (loan.apr_bps / 100).toFixed(2);
 
-            // Fragment with key fixes the "Each child in a list" React warning.
-            // <> shorthand cannot accept a key prop.
-            return (
-              <Fragment key={loan.id}>
-                <tr
-                  style={{
-                    background: isExpanded ? "rgba(126,47,208,0.06)" : undefined,
-                    transition: "all 0.25s ease",
-                    cursor: hasWallet ? "pointer" : "default",
-                  }}
-                  onClick={() => hasWallet && setExpandedId(isExpanded ? null : loan.id)}
-                >
-                  <td style={{ fontFamily: "monospace", fontSize: "0.82rem", color: "#666" }}>
-                    {loan.id.slice(0, 8)}
-                  </td>
-                  <td style={{ fontWeight: 600, color: "#111" }}>{loan.borrower_name}</td>
-                  <td><TrustBadge score={loan.trust_score} /></td>
-                  <td><strong style={{ fontSize: "1rem", color: "#111" }}>{loan.principal_amount.toFixed(2)}</strong> <span style={{ fontSize: "0.75rem", opacity: 0.6, color: "#444" }}>XLM</span></td>
-                  <td style={{ fontWeight: 600, color: "#111" }}>{(loan.apr_bps / 100).toFixed(2)}%</td>
-                  <td style={{ color: "#444" }}>{loan.duration_days} days</td>
-                  <td style={{ color: "#22cf9d", fontWeight: 700 }}>
-                    +{interestXlm} <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>XLM</span>
-                  </td>
-                  <td>
-                    {!hasWallet ? (
-                      <span
-                        style={{ fontSize: "0.75rem", color: "#ff9966", opacity: 0.9, fontWeight: 600 }}
-                        title="Borrower has not connected a Stellar wallet yet"
-                      >
-                        ⚠ No wallet
-                      </span>
-                    ) : (
-                      <button
-                        className="workspace-button workspace-button--primary"
-                        style={{
-                          fontSize: "0.75rem",
-                          padding: "0.4rem 1rem",
-                          height: "auto",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {isExpanded ? "Close" : "Fund →"}
-                      </button>
-                    )}
-                  </td>
-                </tr>
+        return (
+          <Fragment key={loan.id}>
+            {/* Loan card row */}
+            <div
+              className="loan-card"
+              style={{ cursor: hasWallet ? "pointer" : "default",
+                borderColor: isExpanded ? "var(--indigo)" : undefined,
+                boxShadow: isExpanded ? "0 0 0 1px var(--indigo), var(--shadow-glow)" : undefined,
+              }}
+              onClick={() => hasWallet && setExpandedId(isExpanded ? null : loan.id)}
+            >
+              <div className="loan-card-header">
+                {/* Left: amount + borrower */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem", marginBottom: "0.35rem" }}>
+                    <span className="loan-card-amount">
+                      ${loan.principal_amount.toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 500 }}>USDC</span>
+                  </div>
+                  <span style={{
+                    fontFamily: "monospace", fontSize: "0.75rem",
+                    color: "var(--text-muted)", background: "var(--bg-elevated)",
+                    padding: "0.15rem 0.5rem", borderRadius: 6,
+                  }}>
+                    {loan.id.slice(0, 10)}…
+                  </span>
+                </div>
 
-                {/* Inline funding form row */}
-                {isExpanded && (
-                  <tr>
-                    <td 
-                      colSpan={8} 
-                      style={{ 
-                        padding: "1.5rem 1rem", 
-                        background: "#fafafa",
-                        borderBottom: "1px solid rgba(126, 47, 208, 0.15)",
-                        borderTop: "1px solid rgba(126, 47, 208, 0.1)",
-                      }}
-                    >
-                      <div style={{ animation: "fadeInUp 0.3s ease-out" }}>
-                        <DirectFundForm
-                          loan={{
-                            id:               loan.id,
-                            principal_amount: loan.principal_amount,
-                            apr_bps:          loan.apr_bps,
-                            duration_days:    loan.duration_days,
-                            trust_score:      loan.trust_score,
-                            borrower_wallet:  loan.borrower_wallet,
-                          }}
-                          onClose={() => setExpandedId(null)}
-                        />
-                      </div>
-                    </td>
-                  </tr>
+                {/* Right: expand chevron */}
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  {!hasWallet && (
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.75rem", color: "var(--amber)", fontWeight: 600 }}>
+                      <AlertTriangle size={13} /> No wallet
+                    </span>
+                  )}
+                  {hasWallet && (
+                    <div style={{ color: "var(--text-muted)" }}>
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Meta row */}
+              <div className="loan-card-meta">
+                <RepScoreBadge score={loan.trust_score} />
+                <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>·</span>
+                <span className="badge badge-indigo">{apr}% APR</span>
+                <span className="badge badge-muted">
+                  <Clock size={10} />
+                  {loan.duration_days} days
+                </span>
+              </div>
+
+              {/* Footer */}
+              <div className="loan-card-footer">
+                <div>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "0.2rem" }}>
+                    Est. return
+                  </p>
+                  <EstReturn principal={loan.principal_amount} aprBps={loan.apr_bps} days={loan.duration_days} />
+                </div>
+                <div>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "0.2rem" }}>
+                    Borrower
+                  </p>
+                  <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-primary)" }}>{loan.borrower_name}</p>
+                </div>
+                {hasWallet ? (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : loan.id); }}
+                    style={{ minWidth: 90 }}
+                  >
+                    {isExpanded ? "Close" : "Fund Loan →"}
+                  </button>
+                ) : (
+                  <span className="badge badge-amber">
+                    <AlertTriangle size={10} /> Wallet missing
+                  </span>
                 )}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+              </div>
+            </div>
+
+            {/* Inline funding form */}
+            {isExpanded && (
+              <div style={{
+                background: "var(--bg-elevated)", border: "1px solid var(--indigo)",
+                borderRadius: "var(--radius-lg)", padding: "1.5rem",
+                animation: "fade-up 0.25s ease",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+                  <CheckCircle2 size={16} color="var(--teal-light)" />
+                  <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--teal-light)" }}>
+                    Commit to fund this loan — funds will be held in escrow until disbursement
+                  </p>
+                </div>
+                <DirectFundForm
+                  loan={{
+                    id:               loan.id,
+                    principal_amount: loan.principal_amount,
+                    apr_bps:          loan.apr_bps,
+                    duration_days:    loan.duration_days,
+                    trust_score:      loan.trust_score,
+                    borrower_wallet:  loan.borrower_wallet,
+                  }}
+                  onClose={() => setExpandedId(null)}
+                />
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
     </div>
   );
 }

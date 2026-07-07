@@ -1,7 +1,7 @@
 /**
  * lib/contracts/index.ts
  *
- * Barrel export for all TrustLend contract clients.
+ * Barrel export for all Kredex contract clients.
  */
 
 export * as ReputationContract from "./reputation";

@@ -77,17 +77,17 @@ export async function updateUserProfile(
       .eq("id", user.id);
 
     if (updateError) {
-      console.error("[TrustLend] Profile update error:", updateError);
+      console.error("[Kredex] Profile update error:", updateError);
       return {
         success: false,
         error: updateError.message ?? "Failed to update profile.",
       };
     }
 
-    console.log(`[TrustLend] Profile updated for user ${user.id}`);
+    console.log(`[Kredex] Profile updated for user ${user.id}`);
     return { success: true };
   } catch (err) {
-    console.error("[TrustLend] updateUserProfile unexpected error:", err);
+    console.error("[Kredex] updateUserProfile unexpected error:", err);
     return {
       success: false,
       error: err instanceof Error ? err.message : "An unexpected error occurred.",

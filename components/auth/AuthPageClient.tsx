@@ -212,7 +212,7 @@ export function AuthPageClient() {
           >
             <Wallet size={16} /> Wallet Login
           </div>
-          <h1 className="heading-xl" style={{ marginBottom: "0.5rem" }}>Connect to TrustLend</h1>
+          <h1 className="heading-xl" style={{ marginBottom: "0.5rem" }}>Connect to Kredex</h1>
           <p className="text-secondary">Sign in with your Stellar wallet or device biometrics.</p>
           <p className="text-secondary" style={{ fontSize: "0.8rem", marginTop: "0.25rem" }}>
             No password. No email. You own your account.

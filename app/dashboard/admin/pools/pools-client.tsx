@@ -89,7 +89,7 @@ function CreatePoolForm({ onCreated }: { onCreated: () => void }) {
                 name="name"
                 type="text"
                 required
-                placeholder="e.g. TrustLend Alpha Pool"
+                placeholder="e.g. Kredex Alpha Pool"
                 className="workspace-input"
               />
             </div>

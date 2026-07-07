@@ -29,6 +29,7 @@ export interface StepItem {
 
 export interface ReasonItem {
   title: string;
+  description?: string;
 }
 
 export interface P2PStep {

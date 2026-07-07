@@ -327,7 +327,7 @@ export function LenderForms({ pools, positions, platformAddress }: LenderFormsPr
 
     const txHash: string = submitData.hash;
 
-    // Step 5: Record confirmed deposit on TrustLend backend
+    // Step 5: Record confirmed deposit on Kredex backend
     const apiRes = await fetch("/api/pools/deposit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -407,7 +407,7 @@ export function LenderForms({ pools, positions, platformAddress }: LenderFormsPr
           <div>
             <h3 className="workspace-subheading">Deposit to Pool</h3>
             <p className="workspace-card-copy" style={{ fontSize: "0.82rem", opacity: 0.7, marginBottom: "0.75rem" }}>
-              Your XLM will be sent directly to TrustLend&apos;s Stellar escrow via Freighter.
+              Your XLM will be sent directly to Kredex&apos;s Stellar escrow via Freighter.
               A real on-chain transaction is required — no mock deposits.
             </p>
             <DepositForm pools={pools} onSubmit={handleDeposit} />
