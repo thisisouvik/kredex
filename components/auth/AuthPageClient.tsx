@@ -62,10 +62,11 @@ export function AuthPageClient() {
     if (walletType === "freighter") {
       try {
         const signRes = await signMessage(nonce);
-        const sig = typeof signRes === "string" ? signRes : (signRes as any).signature ?? "";
+        const sig = typeof signRes === "string" ? signRes : (signRes as { signature?: string }).signature ?? "";
         signPayload = { signature: sig };
-      } catch (e: any) {
-        throw new Error("Freighter signing failed: " + (e?.message || e));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error("Freighter signing failed: " + msg);
       }
     } else if (walletType === "albedo") {
       const signRes = await albedo.signMessage({ message: nonce, pubkey: walletAddress });
@@ -116,8 +117,9 @@ export function AuthPageClient() {
 
       await runAuthFlow(res.address, "freighter");
       router.push("/dashboard");
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Freighter login failed." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Freighter login failed.";
+      setMessage({ type: "error", text: msg });
     } finally {
       setIsLoading(false);
       setActiveWallet(null);
@@ -133,8 +135,9 @@ export function AuthPageClient() {
       const res = await albedo.publicKey({});
       await runAuthFlow(res.pubkey, "albedo");
       router.push("/dashboard");
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Albedo login failed." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Albedo login failed.";
+      setMessage({ type: "error", text: msg });
     } finally {
       setIsLoading(false);
       setActiveWallet(null);
@@ -180,11 +183,12 @@ export function AuthPageClient() {
         await runAuthFlow(reg.walletHandle, "passkey");
         router.push("/dashboard");
       }
-    } catch (err: any) {
-      if (err.name === "NotAllowedError") {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "NotAllowedError") {
         setMessage({ type: "error", text: "Biometric authentication was cancelled. Please try again." });
       } else {
-        setMessage({ type: "error", text: err.message || "Passkey login failed." });
+        const msg = err instanceof Error ? err.message : "Passkey login failed.";
+        setMessage({ type: "error", text: msg });
       }
     } finally {
       setIsLoading(false);

@@ -1,5 +1,6 @@
 import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { ProfileSettingsForm } from "@/components/dashboard/ProfileSettingsForm";
+import ReputationBadge from "@/components/dashboard/ReputationBadge";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import {
   getBorrowerDashboardMetrics,
@@ -314,21 +315,16 @@ export default async function BorrowerProfilePage() {
               </div>
             </div>
 
-            {/* Reputation note */}
-            <p
-              style={{
-                fontSize: "0.78rem",
-                color: "#9ca3af",
-                lineHeight: 1.6,
-                padding: "0.75rem",
-                borderRadius: "0.5rem",
-                background: "rgba(126,47,208,0.03)",
-                border: "1px solid rgba(126,47,208,0.08)",
-              }}
-            >
-              🔗 Your profile data is anchored to an on-chain reputation score on the
-              Stellar testnet. Only verified users can access active lending pools.
-            </p>
+            {/* Reputation Badge */}
+            <div style={{ marginBottom: "0.5rem" }}>
+              <h3 style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: "0.6rem" }}>
+                Reputation Badge
+              </h3>
+              <ReputationBadge
+                walletAddress={user.wallet}
+                reputationScore={metrics?.reputationScore ?? undefined}
+              />
+            </div>
           </article>
 
           {/* Account Security */}

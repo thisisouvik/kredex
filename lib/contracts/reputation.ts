@@ -26,6 +26,34 @@ if (!CONTRACT_ID) {
 // ─── Read functions (simulation only — no signing required) ───────────────────
 
 /**
+ * Lightweight score-only read — extracts `reputation_score` from get_profile.
+ * Uses simulation (no signing, no gas cost).
+ * Returns null on any RPC/contract failure.
+ */
+export async function getScoreSafe(
+  borrowerAddress: string,
+  callerAddress: string = borrowerAddress
+): Promise<{ score: number; tier: string; kycTier: number; isFrozen: boolean } | null> {
+  try {
+    const raw = await simulateContractCall({
+      contractId: CONTRACT_ID,
+      method: "get_profile",
+      args: [addressToScVal(borrowerAddress)],
+      callerAddress,
+    });
+    const r = raw as Record<string, unknown>;
+    return {
+      score: Number(r.reputation_score ?? 0),
+      tier: extractEnumVariant(r.reputation_tier),
+      kycTier: Number(r.kyc_tier ?? 0),
+      isFrozen: Boolean(r.is_frozen),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check whether a borrower has an on-chain profile.
  */
 export async function hasProfile(
