@@ -11,17 +11,21 @@ export async function POST(req: Request) {
   try {
     const { walletHandle, credentialId, publicKeyBase64 } = await req.json();
 
-    if (!walletHandle || !credentialId || !publicKeyBase64) {
+    if (!walletHandle || !credentialId) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
     }
+
+    const kycData = publicKeyBase64
+      ? { credentialId, publicKeyBase64 }
+      : { credentialId };
 
     // Store the passkey wallet profile
     const profile = await prisma.walletProfile.upsert({
       where: { walletAddress: walletHandle },
-      update: { kycData: { credentialId, publicKeyBase64 } },
+      update: { kycData },
       create: {
         walletAddress: walletHandle,
-        kycData: { credentialId, publicKeyBase64 },
+        kycData,
       },
     });
 

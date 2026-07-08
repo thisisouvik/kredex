@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { redis } from '@/lib/redis/client';
 
 export async function POST(req: Request) {
   try {
@@ -10,20 +10,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
     }
 
-    // For passkey wallets, also store the credentialId with the challenge
-    // so the verify step can look it up
+    // For passkey wallets, credentialId is required
     if (authType === 'passkey' && !credentialId) {
       return NextResponse.json({ error: 'credentialId required for passkey auth' }, { status: 400 });
     }
 
     const nonce = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    await prisma.authChallenge.upsert({
-      where: { walletAddress },
-      update: { nonce, expiresAt },
-      create: { walletAddress, nonce, expiresAt },
-    });
+    // Store nonce in Redis with 5-minute TTL — no database needed!
+    const key = `auth:challenge:${walletAddress}`;
+    await redis.set(key, JSON.stringify({ nonce, authType, credentialId }), { ex: 5 * 60 });
 
     return NextResponse.json({ nonce });
 

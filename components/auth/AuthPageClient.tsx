@@ -158,7 +158,7 @@ export function AuthPageClient() {
         // The handle is stored with the credential.
         // We use the credential ID prefix as the wallet handle (same as registration).
         const walletHandle = `pk_${existingCredentialId.slice(0, 24)}`;
-        await runAuthFlow(walletHandle, "passkey");
+        await runAuthFlow(walletHandle, "passkey", { credentialId: existingCredentialId });
         router.push("/dashboard");
       } else {
         // ── New user — register passkey ────────────────────────────────────
@@ -180,7 +180,7 @@ export function AuthPageClient() {
         if (!regRes.ok) throw new Error("Failed to register passkey");
 
         // Now authenticate immediately after registration
-        await runAuthFlow(reg.walletHandle, "passkey");
+        await runAuthFlow(reg.walletHandle, "passkey", { credentialId: reg.credentialId });
         router.push("/dashboard");
       }
     } catch (err: unknown) {

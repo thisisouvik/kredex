@@ -53,7 +53,7 @@ function base64UrlDecode(str: string): ArrayBuffer {
 
 export interface PasskeyRegistrationResult {
   credentialId: string;          // base64url — unique device credential identifier
-  publicKeyBase64: string;       // base64url — raw COSE public key bytes
+  publicKeyBase64?: string;      // base64url — raw COSE public key bytes when available
   walletHandle: string;          // "pk_<credentialId_prefix>" — used as wallet address in Kredex
 }
 
@@ -93,13 +93,13 @@ export async function registerPasskey(userDisplayName: string): Promise<PasskeyR
 
   const response = credential.response as AuthenticatorAttestationResponse;
   const credentialId = base64UrlEncode(credential.rawId);
-  const publicKeyBase64 = base64UrlEncode(response.getPublicKey()!);
+  const publicKey = response.getPublicKey?.();
 
   storeCredentialId(credentialId);
 
   return {
     credentialId,
-    publicKeyBase64,
+    publicKeyBase64: publicKey ? base64UrlEncode(publicKey) : undefined,
     walletHandle: `pk_${credentialId.slice(0, 24)}`,
   };
 }
