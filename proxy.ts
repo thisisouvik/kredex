@@ -57,46 +57,12 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // ── ③ Supabase cookie-based session check (NO NETWORK CALL) ─────────────────
-  // We use getSession() here because it reads the JWT from the cookie locally.
-  // getUser() makes a live Supabase network call on every request and is the
-  // cause of the 10 s connect-timeout errors. Full JWT verification happens
-  // inside requireAuthenticatedUser() in each protected page/API route.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // ── ③ Custom JWT Session Check (replaces Supabase Auth) ─────────────────────
+  // We use our own JWT stored in the Kredex_session cookie
+  const sessionCookie = request.cookies.get("Kredex_session");
+  const hasSession = !!sessionCookie?.value;
 
-  if (!url || !anonKey) {
-    return NextResponse.next({ request });
-  }
-
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          supabaseResponse.cookies.set(name, value, options);
-        });
-      },
-    },
-  });
-
-  // Securely get user via Supabase Auth server to prevent session spoofing warnings
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const effectiveUser = bypassActive
-    ? {
-        id: bypassUserId,
-        user_metadata: { account_type: normalizeUserRole(bypassRoleRaw) },
-      }
-    : user ?? null;
+  const effectiveUser = bypassActive ? true : hasSession;
 
   const isDashboardPath = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
   const isAuthEntryPath = pathname === "/auth";
@@ -109,14 +75,15 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isAuthEntryPath && effectiveUser) {
+    // If we have a session, assume borrower dashboard by default.
+    // The actual page will re-route if needed based on JWT contents.
     const redirectUrl = request.nextUrl.clone();
-    const role = normalizeUserRole(effectiveUser.user_metadata?.account_type);
-    redirectUrl.pathname = getDashboardPath(role);
+    redirectUrl.pathname = "/dashboard/borrower";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
 
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
 
 export const config = {

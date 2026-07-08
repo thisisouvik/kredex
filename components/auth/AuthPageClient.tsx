@@ -62,7 +62,9 @@ export function AuthPageClient() {
     if (walletType === "freighter") {
       try {
         const signRes = await signMessage(nonce);
-        const sig = typeof signRes === "string" ? signRes : (signRes as { signature?: string }).signature ?? "";
+        // Freighter v6 returns { signedMessage: string, signerAddress: string }
+        const sig = (signRes as any).signedMessage || (signRes as any).signature || (typeof signRes === "string" ? signRes : "");
+        if (!sig) throw new Error("Wallet returned empty signature");
         signPayload = { signature: sig };
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -116,7 +118,7 @@ export function AuthPageClient() {
       if (res.error) throw new Error(res.error);
 
       await runAuthFlow(res.address, "freighter");
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Freighter login failed.";
       setMessage({ type: "error", text: msg });
@@ -134,7 +136,7 @@ export function AuthPageClient() {
     try {
       const res = await albedo.publicKey({});
       await runAuthFlow(res.pubkey, "albedo");
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Albedo login failed.";
       setMessage({ type: "error", text: msg });
@@ -159,7 +161,7 @@ export function AuthPageClient() {
         // We use the credential ID prefix as the wallet handle (same as registration).
         const walletHandle = `pk_${existingCredentialId.slice(0, 24)}`;
         await runAuthFlow(walletHandle, "passkey", { credentialId: existingCredentialId });
-        router.push("/dashboard");
+        window.location.href = "/dashboard";
       } else {
         // ── New user — register passkey ────────────────────────────────────
         setMessage({ type: "info", text: "Creating your passkey — follow the biometric prompt..." });
@@ -167,7 +169,6 @@ export function AuthPageClient() {
         const displayName = `user_${Date.now().toString(36)}`;
         const reg = await registerPasskey(displayName);
 
-        // Store the passkey profile in DB so verify can look it up
         const regRes = await fetch("/api/auth/passkey/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -177,11 +178,14 @@ export function AuthPageClient() {
             publicKeyBase64: reg.publicKeyBase64,
           }),
         });
-        if (!regRes.ok) throw new Error("Failed to register passkey");
+        if (!regRes.ok) {
+          const errData = await regRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to register passkey (API error)");
+        }
 
         // Now authenticate immediately after registration
         await runAuthFlow(reg.walletHandle, "passkey", { credentialId: reg.credentialId });
-        router.push("/dashboard");
+        window.location.href = "/dashboard";
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "NotAllowedError") {

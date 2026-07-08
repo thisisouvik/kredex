@@ -7,19 +7,26 @@ import Link from "next/link";
 export default async function UnifiedDashboardPage() {
   const { user } = await requireAuthenticatedUser();
 
-  const activeBorrowingsCount = await prisma.loan.count({
-    where: {
-      borrowerId: user.id,
-      status: { in: ["REQUESTED", "APPROVED", "FUNDED", "ACTIVE"] },
-    },
-  });
+  let activeBorrowingsCount = 0;
+  let activeLendingsCount = 0;
 
-  const activeLendingsCount = await prisma.loan.count({
-    where: {
-      lenderId: user.id,
-      status: { in: ["APPROVED", "FUNDED", "ACTIVE"] },
-    },
-  });
+  try {
+    activeBorrowingsCount = await prisma.loan.count({
+      where: {
+        borrowerId: user.id,
+        status: { in: ["REQUESTED", "APPROVED", "FUNDED", "ACTIVE"] },
+      },
+    });
+
+    activeLendingsCount = await prisma.loan.count({
+      where: {
+        lenderId: user.id,
+        status: { in: ["APPROVED", "FUNDED", "ACTIVE"] },
+      },
+    });
+  } catch (dbError) {
+    console.warn("Dashboard DB fetch failed (non-fatal):", dbError);
+  }
 
   const isActivelyBorrowing = activeBorrowingsCount > 0;
   const isActivelyLending = activeLendingsCount > 0;
