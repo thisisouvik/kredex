@@ -10,8 +10,8 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      // Supabase + Stellar APIs
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://horizon-testnet.stellar.org https://soroban-testnet.stellar.org https://friendbot.stellar.org",
+      // Supabase + Stellar APIs + Vercel Analytics
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://horizon-testnet.stellar.org https://soroban-testnet.stellar.org https://friendbot.stellar.org https://vitals.vercel-insights.com",
       "img-src 'self' data: blob: https://*.supabase.co",
       "frame-ancestors 'none'",
       "base-uri 'self'",
