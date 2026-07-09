@@ -1756,6 +1756,21 @@ input, select, textarea { font: inherit; }
   gap: 1.5rem;
 }
 
+.workspace-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.workspace-grid--two {
+  grid-template-columns: repeat(1, 1fr);
+}
+
+@media (min-width: 768px) {
+  .workspace-grid--two {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .workspace-card {
   background: var(--bg-card);
   border: 1px solid var(--border);

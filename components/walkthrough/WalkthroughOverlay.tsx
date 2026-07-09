@@ -11,6 +11,7 @@ export function WalkthroughOverlay() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     const isDismissed = localStorage.getItem("kredex_walkthrough_dismissed") === "true";
     setDismissed(isDismissed);
@@ -43,8 +44,8 @@ export function WalkthroughOverlay() {
     message = "Fill out the amount (up to 100 XLM) and duration, then click 'Submit Application'. Your wallet will ask you to approve the transaction, giving you your first transaction hash!";
   } else if (pathname === "/dashboard/lender") {
     title = "Lender Dashboard";
-    message = "Welcome to your Lender Dashboard! Click on 'Manage Pools' or 'Direct P2P Loans' to fund a loan.";
-    actionText = "Next: Explore pools";
+    message = "Welcome to your Lender Dashboard! Click on 'Pool Investment' or 'Loan Marketplace' to fund a loan.";
+    actionText = "Next: Pool Investment";
     nextHref = "/dashboard/lender/pools";
   } else if (pathname.includes("/dashboard/lender/pools") || pathname.includes("/dashboard/lender/history")) {
     title = "Fund a Loan";
