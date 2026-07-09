@@ -107,59 +107,42 @@ export async function POST(req: Request) {
     let userUuid = null; 
     try {
       const { randomUUID } = await import('crypto');
-      const { Client } = await import('pg');
+      const { getServiceRoleClient } = await import('@/lib/supabase/server');
+      const supabase = getServiceRoleClient();
       
-      // Strip query parameters (like sslmode=require) that override our rejectUnauthorized setting
-      const rawUrl = process.env.DATABASE_URL?.split('?')[0];
+      if (!supabase) {
+        throw new Error("Supabase client is unavailable");
+      }
       
-      const client = new Client({
-        connectionString: rawUrl,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 5000,
-      });
-      await client.connect();
-      
-      // 1. Check if user already exists in profiles by wallet_address
-      const profileRes = await client.query('SELECT id FROM profiles WHERE wallet_address = $1', [walletAddress]);
-      
-      if (profileRes.rows.length > 0) {
-        userUuid = profileRes.rows[0].id;
-      } else {
-        // Check wallet_profiles as fallback
-        const wpRes = await client.query('SELECT id FROM wallet_profiles WHERE wallet_address = $1', [walletAddress]);
-        if (wpRes.rows.length > 0) {
-          userUuid = wpRes.rows[0].id;
-        } else {
-          // Generate new UUID
-          userUuid = randomUUID();
-        }
+      // 1. Check if user already exists in wallet_profiles
+      const { data: wpData, error: wpError } = await supabase
+        .from('wallet_profiles')
+        .select('id')
+        .eq('wallet_address', walletAddress)
+        .maybeSingle();
         
-        // Insert into profiles
-        await client.query(
-          `INSERT INTO profiles (id, wallet_address, full_name, role) 
-           VALUES ($1, $2, $3, $4) 
-           ON CONFLICT (id) DO NOTHING`,
-          [userUuid, walletAddress, 'Wallet User', 'borrower']
-        );
+      if (wpError) throw wpError;
+      
+      if (wpData) {
+        userUuid = wpData.id;
+      } else {
+        // Generate new UUID for wallet profile
+        userUuid = randomUUID();
       }
       
       // Sync wallet_profiles
-      await client.query(
-        `INSERT INTO wallet_profiles (id, wallet_address) VALUES ($1, $2)
-         ON CONFLICT (wallet_address) DO UPDATE SET updated_at = NOW()`,
-        [userUuid, walletAddress]
-      );
-      
-      await client.end();
+      const { error: syncError } = await supabase
+        .from('wallet_profiles')
+        .upsert({
+          id: userUuid,
+          wallet_address: walletAddress
+        });
+        
+      if (syncError) throw syncError;
+
     } catch (dbErr) {
       console.error('CRITICAL DB profile upsert failed:', dbErr);
-      // We must NEVER fallback to walletAddress because that causes a legacy token redirect loop.
-      // If DB fails, generate a random UUID so they can at least get a valid session token format.
-      // They won't have a DB profile, but the app handles that gracefully.
-      if (!userUuid) {
-         const { randomUUID } = await import('crypto');
-         userUuid = randomUUID();
-      }
+      return NextResponse.json({ error: 'Database connection failed. Please try again.' }, { status: 500 });
     }
 
     // ── Issue JWT Session ─────────────────────────────────────────────────────

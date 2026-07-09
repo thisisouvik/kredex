@@ -68,18 +68,24 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         const { getServiceRoleClient } = await import('@/lib/supabase/server');
         const srClient = getServiceRoleClient();
         if (srClient) {
-          const { data, error } = await srClient.from('profiles').select('email, email_confirmed_at').eq('id', decoded.sub).maybeSingle();
-          if (error) throw error;
-          if (!data) {
+          // 1. JWT users must exist in wallet_profiles
+          const { data: wpData, error: wpError } = await srClient.from('wallet_profiles').select('id').eq('id', decoded.sub).maybeSingle();
+          if (wpError) throw wpError;
+          if (!wpData) {
             // DB was likely wiped, but cookie remained. Invalidate session!
             return redirect("/api/auth/signout?reason=db_wiped");
           }
-          dbEmail = data.email || "";
-          dbEmailConfirmedAt = data.email_confirmed_at || "";
+          
+          // 2. Optionally fetch email from profiles if linked
+          const { data: pData } = await srClient.from('profiles').select('email, email_confirmed_at').eq('id', decoded.sub).maybeSingle();
+          if (pData) {
+            dbEmail = pData.email || "";
+            dbEmailConfirmedAt = pData.email_confirmed_at || "";
+          }
         }
       } catch (e) {
         if ((e as Error).message === "NEXT_REDIRECT") throw e;
-        // If profile doesn't exist, this JWT is effectively dead (stale).
+        // If wallet profile doesn't exist, this JWT is effectively dead (stale).
         return redirect("/api/auth/signout?reason=stale");
       }
 
