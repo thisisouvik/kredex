@@ -568,7 +568,7 @@ mod tests {
 
         assert!(!client.is_frozen(&borrower));
 
-        let reason = soroban_sdk::String::from_str(&Env::default(), "Fraud suspected");
+        let _reason = soroban_sdk::String::from_str(&Env::default(), "Fraud suspected");
         // Note: we need env to build the string — simplified test
         client.freeze_account(&admin1, &admin2, &borrower, &soroban_sdk::String::from_str(
             &client.env, "Fraud suspected"
