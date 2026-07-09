@@ -63,6 +63,7 @@ export function AuthPageClient() {
       try {
         const signRes = await signMessage(nonce);
         // Freighter v6 returns { signedMessage: string, signerAddress: string }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sig = (signRes as any).signedMessage || (signRes as any).signature || (typeof signRes === "string" ? signRes : "");
         if (!sig) throw new Error("Wallet returned empty signature");
         signPayload = { signature: sig };
