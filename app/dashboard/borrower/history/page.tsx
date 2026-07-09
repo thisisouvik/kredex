@@ -191,12 +191,12 @@ export default async function BorrowerHistoryPage() {
           ].map((s) => (
             <article key={s.label} style={{
               padding: "1.1rem 1.25rem", borderRadius: "0.9rem",
-              background: "#fff", border: "1px solid #eef0f8",
+              background: "var(--bg-card)", border: "1px solid var(--border)",
               boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
             }}>
               <div style={{ fontSize: "1.5rem", marginBottom: "0.35rem" }}>{s.icon}</div>
               <p style={{ fontSize: "1.2rem", fontWeight: 800, color: s.color, margin: "0 0 0.2rem", fontFamily: "system-ui" }}>{s.value}</p>
-              <p style={{ fontSize: "0.75rem", color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", margin: 0 }}>{s.label}</p>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", margin: 0 }}>{s.label}</p>
             </article>
           ))}
         </section>
@@ -249,7 +249,7 @@ export default async function BorrowerHistoryPage() {
 
                     {/* Details */}
                     <div style={{ flex: 1, minWidth: "200px" }}>
-                      <p style={{ margin: 0, fontWeight: 700, fontSize: "0.88rem", color: "#111827" }}>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
                         {isRequested ? "Loan Request Created" : isFunding ? "Funding Received" : "Repayment Made"}
                       </p>
                       <p style={{ margin: "0.15rem 0 0", fontSize: "0.75rem", color: "#9ca3af", fontFamily: "monospace" }}>

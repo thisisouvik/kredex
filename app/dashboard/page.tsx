@@ -47,10 +47,12 @@ export default async function UnifiedDashboardPage() {
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <div style={{
             width: 30, height: 30, borderRadius: 9,
-            background: "linear-gradient(135deg, #6366F1, #14B8A6)",
+            background: "white",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800, color: "#fff", fontSize: "0.85rem",
-          }}>K</div>
+            padding: "3px"
+          }}>
+            <img src="/logo.png" alt="Kredex" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          </div>
           <span className="font-display" style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-primary)" }}>Kredex</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>

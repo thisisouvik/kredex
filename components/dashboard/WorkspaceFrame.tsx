@@ -100,7 +100,9 @@ export function WorkspaceFrame({
             {/* Brand */}
             <div className="workspace-brand-wrap">
               <Link href="/" className="workspace-brand font-display">
-                <div className="workspace-brand-orb">K</div>
+                <div style={{ background: "white", padding: "4px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", width: "32px", height: "32px" }}>
+                   <img src="/logo.png" alt="Kredex Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                </div>
                 Kredex
               </Link>
               <p className="workspace-sidebar-kicker">{roleLabel}</p>

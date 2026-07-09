@@ -371,6 +371,57 @@ export function AuthPageClient() {
             </div>
             <ChevronRight size={16} style={{ opacity: 0.5, flexShrink: 0 }} />
           </button>
+
+          {/* Divider */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: "0.75rem",
+            color: "var(--text-secondary)", fontSize: "0.8rem", marginTop: "0.5rem"
+          }}>
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+            Returning Users
+            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          </div>
+
+          <button
+            onClick={async () => {
+              setIsLoading(true);
+              setMessage(null);
+              try {
+                const { getBrowserSupabaseClient } = await import("@/lib/supabase/client");
+                const supabase = getBrowserSupabaseClient();
+                if (!supabase) throw new Error("Supabase client unavailable");
+                
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: 'google',
+                  options: { redirectTo: `${window.location.origin}/auth/callback` }
+                });
+                if (error) throw error;
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : "Google login failed.";
+                setMessage({ type: "error", text: msg });
+                setIsLoading(false);
+              }
+            }}
+            disabled={busy}
+            className="btn btn-outline"
+            style={{ 
+              padding: "1rem 1.5rem", 
+              justifyContent: "space-between",
+              whiteSpace: "normal",
+              textAlign: "left",
+              gap: "1rem",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flex: 1, minWidth: 0 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600 }}>Continue with Google</div>
+                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: "1px", lineHeight: 1.3 }}>
+                  For legacy email accounts
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={16} style={{ opacity: 0.5, flexShrink: 0 }} />
+          </button>
         </div>
 
         {/* Footer */}

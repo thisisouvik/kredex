@@ -60,7 +60,22 @@ export async function proxy(request: NextRequest) {
   // ── ③ Custom JWT Session Check (replaces Supabase Auth) ─────────────────────
   // We use our own JWT stored in the Kredex_session cookie
   const sessionCookie = request.cookies.get("Kredex_session");
-  const hasSession = !!sessionCookie?.value;
+  
+  let hasSession = false;
+  if (sessionCookie?.value) {
+    try {
+      const parts = sessionCookie.value.split('.');
+      if (parts.length === 3) {
+        const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
+        const payload = JSON.parse(payloadStr);
+        if (payload.sub && isValidUuid(payload.sub)) {
+          hasSession = true;
+        }
+      }
+    } catch (e) {
+      hasSession = false;
+    }
+  }
 
   const effectiveUser = bypassActive ? true : hasSession;
 

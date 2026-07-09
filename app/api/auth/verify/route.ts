@@ -103,10 +103,69 @@ export async function POST(req: Request) {
     // ── Delete challenge (single-use) ─────────────────────────────────────────
     await redis.del(key);
 
+    // ── Upsert Profile and Wallet Profile in DB ────────────────────────────────
+    let userUuid = null; 
+    try {
+      const { randomUUID } = await import('crypto');
+      const { Client } = await import('pg');
+      
+      // Strip query parameters (like sslmode=require) that override our rejectUnauthorized setting
+      const rawUrl = process.env.DATABASE_URL?.split('?')[0];
+      
+      const client = new Client({
+        connectionString: rawUrl,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 5000,
+      });
+      await client.connect();
+      
+      // 1. Check if user already exists in profiles by wallet_address
+      const profileRes = await client.query('SELECT id FROM profiles WHERE wallet_address = $1', [walletAddress]);
+      
+      if (profileRes.rows.length > 0) {
+        userUuid = profileRes.rows[0].id;
+      } else {
+        // Check wallet_profiles as fallback
+        const wpRes = await client.query('SELECT id FROM wallet_profiles WHERE wallet_address = $1', [walletAddress]);
+        if (wpRes.rows.length > 0) {
+          userUuid = wpRes.rows[0].id;
+        } else {
+          // Generate new UUID
+          userUuid = randomUUID();
+        }
+        
+        // Insert into profiles
+        await client.query(
+          `INSERT INTO profiles (id, wallet_address, full_name, role) 
+           VALUES ($1, $2, $3, $4) 
+           ON CONFLICT (id) DO NOTHING`,
+          [userUuid, walletAddress, 'Wallet User', 'borrower']
+        );
+      }
+      
+      // Sync wallet_profiles
+      await client.query(
+        `INSERT INTO wallet_profiles (id, wallet_address) VALUES ($1, $2)
+         ON CONFLICT (wallet_address) DO UPDATE SET updated_at = NOW()`,
+        [userUuid, walletAddress]
+      );
+      
+      await client.end();
+    } catch (dbErr) {
+      console.error('CRITICAL DB profile upsert failed:', dbErr);
+      // We must NEVER fallback to walletAddress because that causes a legacy token redirect loop.
+      // If DB fails, generate a random UUID so they can at least get a valid session token format.
+      // They won't have a DB profile, but the app handles that gracefully.
+      if (!userUuid) {
+         const { randomUUID } = await import('crypto');
+         userUuid = randomUUID();
+      }
+    }
+
     // ── Issue JWT Session ─────────────────────────────────────────────────────
-    // Use walletAddress directly as the stable user identifier
+    // Use the true UUID as the subject, keeping wallet address for convenience
     const token = jwt.sign(
-      { sub: walletAddress, wallet: walletAddress, authType: authType ?? 'stellar' },
+      { sub: userUuid, wallet: walletAddress, authType: authType ?? 'stellar' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -120,26 +179,6 @@ export async function POST(req: Request) {
       path: '/',
       maxAge: 7 * 24 * 60 * 60,
     });
-
-    // ── Upsert Wallet Profile in DB (best-effort, non-blocking) ──────────────
-    // Done after session is issued so auth never fails due to DB issues
-    try {
-      const { Client } = await import('pg');
-      const client = new Client({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
-        connectionTimeoutMillis: 5000,
-      });
-      await client.connect();
-      await client.query(
-        `INSERT INTO wallet_profiles (wallet_address) VALUES ($1)
-         ON CONFLICT (wallet_address) DO NOTHING`,
-        [walletAddress]
-      );
-      await client.end();
-    } catch (dbErr) {
-      console.warn('DB profile upsert failed (non-fatal):', dbErr);
-    }
 
     return NextResponse.json({ success: true, wallet: walletAddress });
 

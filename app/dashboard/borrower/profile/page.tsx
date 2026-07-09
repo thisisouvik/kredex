@@ -59,7 +59,10 @@ export default async function BorrowerProfilePage() {
   const metrics = await getBorrowerDashboardMetrics(user.id);
 
   const supabase = await getServerSupabaseClient();
-  const { data: profile } = supabase
+  
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id);
+  
+  const { data: profile } = (supabase && isUUID)
     ? await supabase
         .from("profiles")
         .select("full_name, phone, date_of_birth, role, country_code, kyc_status, risk_status, government_id_url, kyc_submitted_at")
@@ -393,10 +396,10 @@ export default async function BorrowerProfilePage() {
               </li>
             </ul>
 
-            <div className="workspace-inline-actions" style={{ marginTop: "1rem" }}>
-              <button type="button" className="workspace-nav-link">
-                Change Password
-              </button>
+            <div style={{ marginTop: "1rem", padding: "0.75rem", background: "rgba(34,207,157,0.05)", borderRadius: "0.5rem", border: "1px solid rgba(34,207,157,0.2)" }}>
+              <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                <strong style={{ color: "var(--teal-light)" }}>Secure Authentication:</strong> Your account is protected by Web3 cryptography (Passkey or Wallet). No passwords to manage.
+              </p>
             </div>
           </article>
         </div>
