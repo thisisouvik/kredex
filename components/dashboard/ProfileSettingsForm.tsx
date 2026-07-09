@@ -104,7 +104,8 @@ export function ProfileSettingsForm({
       if (supabase) {
         await supabase.auth.signOut();
       }
-      router.push("/auth");
+      // Redirect to the signout route to clear httpOnly cookies
+      window.location.href = "/api/auth/signout";
     } catch (err) {
       console.error("Logout failed:", err);
       setSigningOut(false);

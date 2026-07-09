@@ -53,18 +53,22 @@ export const metadata: Metadata = {
   },
 };
 
+import { WalkthroughOverlay } from "@/components/walkthrough/WalkthroughOverlay";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full" data-scroll-behavior="smooth">
+    <html lang="en" className="h-full" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${spaceGrotesk.variable} flex w-full min-h-full flex-col antialiased`}
         style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}
+        suppressHydrationWarning
       >
         {children}
+        <WalkthroughOverlay />
         <Analytics />
       </body>
     </html>

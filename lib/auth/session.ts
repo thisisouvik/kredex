@@ -20,6 +20,19 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
       if (expectedRole && bypassRole !== expectedRole) {
         redirect("/auth");
       }
+      
+      // Upsert dev profile to avoid foreign key errors (e.g. loans_borrower_id_fkey)
+      try {
+        const { getServiceRoleClient } = await import('@/lib/supabase/server');
+        const srClient = getServiceRoleClient();
+        if (srClient) {
+          await srClient.from('profiles').upsert({ id: bypassUserId, wallet_address: "GBYPASSADDRESS0000000000000000000000000000000000000000000", role: bypassRole, full_name: `Dev Bypass ${bypassRole}` });
+          await srClient.from('wallet_profiles').upsert({ id: bypassUserId, wallet_address: "GBYPASSADDRESS0000000000000000000000000000000000000000000" });
+        }
+      } catch (e) {
+        // Ignore errors, might be read-only or offline
+      }
+
       return {
         user: {
           id: bypassUserId,
@@ -55,14 +68,19 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         const { getServiceRoleClient } = await import('@/lib/supabase/server');
         const srClient = getServiceRoleClient();
         if (srClient) {
-          const { data } = await srClient.from('profiles').select('email, email_confirmed_at').eq('id', decoded.sub).maybeSingle();
-          if (data) {
-            dbEmail = data.email || "";
-            dbEmailConfirmedAt = data.email_confirmed_at || "";
+          const { data, error } = await srClient.from('profiles').select('email, email_confirmed_at').eq('id', decoded.sub).maybeSingle();
+          if (error) throw error;
+          if (!data) {
+            // DB was likely wiped, but cookie remained. Invalidate session!
+            return redirect("/api/auth/signout?reason=db_wiped");
           }
+          dbEmail = data.email || "";
+          dbEmailConfirmedAt = data.email_confirmed_at || "";
         }
       } catch (e) {
-        // ignore db error, fallback to empty
+        if ((e as Error).message === "NEXT_REDIRECT") throw e;
+        // If profile doesn't exist, this JWT is effectively dead (stale).
+        return redirect("/api/auth/signout?reason=stale");
       }
 
       return {
@@ -82,7 +100,9 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         role: 'borrower'
       };
     } catch (error) {
-      // Invalid JWT or legacy token, fallback to supabase
+      if ((error as Error).message === "NEXT_REDIRECT") throw error;
+      // Invalid JWT or legacy token, clear it
+      return redirect("/api/auth/signout?reason=invalid");
     }
   }
 
