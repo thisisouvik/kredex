@@ -212,6 +212,7 @@ export default async function BorrowerProfilePage() {
             initialDob={profile?.date_of_birth ? String(profile.date_of_birth) : ""}
             kycStatus={kycStatusKey}
             hasGovId={hasGovId}
+            emailConfirmed={Boolean(user.email_confirmed_at)}
           />
         </article>
 

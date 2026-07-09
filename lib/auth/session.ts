@@ -30,7 +30,7 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
             full_name: `Dev Bypass ${bypassRole}`,
             wallet_address: "GBYPASSADDRESS0000000000000000000000000000000000000000000"
           },
-          email_confirmed_at: new Date().toISOString(),
+          email_confirmed_at: "",
           created_at: new Date().toISOString(),
           last_sign_in_at: new Date().toISOString(),
         },
@@ -49,17 +49,33 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded.sub);
       if (!isUUID) throw new Error("Legacy token");
 
+      let dbEmail = "";
+      let dbEmailConfirmedAt = "";
+      try {
+        const { getServiceRoleClient } = await import('@/lib/supabase/server');
+        const srClient = getServiceRoleClient();
+        if (srClient) {
+          const { data } = await srClient.from('profiles').select('email, email_confirmed_at').eq('id', decoded.sub).maybeSingle();
+          if (data) {
+            dbEmail = data.email || "";
+            dbEmailConfirmedAt = data.email_confirmed_at || "";
+          }
+        }
+      } catch (e) {
+        // ignore db error, fallback to empty
+      }
+
       return {
         user: {
           id: decoded.sub,
           wallet: decoded.wallet,
-          email: decoded.wallet,
+          email: dbEmail,
           user_metadata: { 
             account_type: 'borrower',
             full_name: 'Wallet User',
             wallet_address: decoded.wallet
           },
-          email_confirmed_at: new Date().toISOString(),
+          email_confirmed_at: dbEmailConfirmedAt,
           created_at: new Date().toISOString(),
           last_sign_in_at: new Date().toISOString(),
         },

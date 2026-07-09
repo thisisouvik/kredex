@@ -46,8 +46,9 @@ export default async function BorrowerLoansPage() {
   });
 
   const isKycVerified = profile?.kyc_status === "verified";
-  const canApplyLoan  = isKycVerified;
-  const maxLoanAmount = canApplyLoan ? metrics.availableCredit : 0;
+  // SILVER TIER: Anyone can apply. Unverified users capped at 100 XLM.
+  const canApplyLoan  = true;
+  const maxLoanAmount = isKycVerified ? metrics.availableCredit : Math.min(metrics.availableCredit, 100);
 
   const REPAYABLE_STATUSES = ["active", "funded", "approved"];
   const activeLoans = normalizedLoans.filter((l) => REPAYABLE_STATUSES.includes(String(l.status)));
@@ -68,14 +69,15 @@ export default async function BorrowerLoansPage() {
       links={borrowerNavLinks}
     >
       <div className="workspace-stack">
-        {!canApplyLoan && (
-          <article className="workspace-card workspace-card--full" style={{ background: "rgba(245,166,35,0.04)", borderColor: "rgba(245,166,35,0.25)" }}>
-            <h2 className="workspace-card-title">⚠️ KYC Required</h2>
+        {!isKycVerified && (
+          <article className="workspace-card workspace-card--full" style={{ background: "rgba(126,47,208,0.04)", borderColor: "rgba(126,47,208,0.25)" }}>
+            <h2 className="workspace-card-title">🥈 Silver Tier Test Account</h2>
             <p className="workspace-card-copy" style={{ marginTop: "0.4rem" }}>
               Your KYC status is currently <strong>{profile?.kyc_status ?? "pending"}</strong>.{" "}
+              You can borrow up to <strong>100 XLM</strong> immediately for testing purposes.
               {profile?.kyc_status === "submitted"
-                ? "Your documents are under admin review. You'll be notified once approved."
-                : "Please complete your profile and submit government ID to apply for loans."}
+                ? " Your documents are under review for higher limits."
+                : " Complete your profile to unlock full borrowing capacity."}
             </p>
             <a href="/dashboard/borrower/profile" style={{ display: "inline-block", marginTop: "0.75rem", fontSize: "0.82rem", color: "#7e2fd0", fontWeight: 600 }}>
               Go to Profile →

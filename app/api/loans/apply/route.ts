@@ -45,7 +45,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── 2. Reputation / credit limit check ───────────────────────────────────
+    // ── 2. Reputation / credit limit check & Silver Tier ──────────────────────
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("kyc_status")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const isKycVerified = profile?.kyc_status === "verified";
+
     const { data: reputation } = await supabase
       .from("reputation_snapshots")
       .select("score_total")
@@ -53,13 +61,21 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     const reputationScore: number = reputation?.score_total ?? 250;
-    const maxLoan = reputationScore * 10;
+    
+    // Default max loan based on reputation
+    let maxLoan = reputationScore * 10;
+    
+    // SILVER TIER ENFORCEMENT: Unverified users can only borrow up to 100 XLM
+    if (!isKycVerified) {
+      maxLoan = Math.min(maxLoan, 100); // hard cap at 100 XLM for test tier
+    }
 
     if (amount > maxLoan) {
-      return NextResponse.json(
-        { error: `Exceeds your credit limit of ${maxLoan} XLM (trust score: ${reputationScore}).` },
-        { status: 400 }
-      );
+      const errorMsg = !isKycVerified 
+        ? `As a Silver Tier (unverified) user, your limit is ${maxLoan} XLM. Complete KYC to unlock higher limits.`
+        : `Exceeds your credit limit of ${maxLoan} XLM (trust score: ${reputationScore}).`;
+        
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
 
     // ── 3. Calculate APR ─────────────────────────────────────────────────────

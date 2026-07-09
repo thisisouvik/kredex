@@ -79,8 +79,10 @@ export default async function BorrowerDashboardPage() {
   ];
   const verificationProgress = Math.round((verificationItems.filter((i) => i.done).length / verificationItems.length) * 100);
   const profileComplete = verificationProgress === 100;
-  const canApplyLoan = profileComplete && isKycVerified;
-  const profileNeedsAttention = !canApplyLoan;
+  
+  // SILVER TIER: Anyone can apply for a loan. If unverified, they are capped at 100 XLM.
+  const canApplyLoan = true;
+  const profileNeedsAttention = !profileComplete || !isKycVerified;
 
   // Active = any loan with money disbursed that still needs repayment
   const REPAYABLE_STATUSES = ["active", "funded", "approved"];
