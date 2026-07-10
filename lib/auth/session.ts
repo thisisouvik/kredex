@@ -62,31 +62,48 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded.sub);
       if (!isUUID) throw new Error("Legacy token");
 
+      // ── JWT is cryptographically valid. Trust it. ────────────────────────────
+      // We only do a DB check as a best-effort to enrich the user object.
+      // If DB is unreachable we still let the user through — the JWT itself
+      // is the source of truth (signed with our secret, 7-day expiry).
       let dbEmail = "";
       let dbEmailConfirmedAt = "";
       try {
         const { getServiceRoleClient } = await import('@/lib/supabase/server');
         const srClient = getServiceRoleClient();
         if (srClient) {
-          // 1. JWT users must exist in wallet_profiles
-          const { data: wpData, error: wpError } = await srClient.from('wallet_profiles').select('id').eq('id', decoded.sub).maybeSingle();
-          if (wpError) throw wpError;
+          // Check wallet_profiles exists for this user
+          const { data: wpData } = await srClient
+            .from('wallet_profiles')
+            .select('id')
+            .eq('id', decoded.sub)
+            .maybeSingle();
+
+          // If wallet profile is missing AND we can connect to DB, the cookie is stale
+          // (e.g. DB was wiped). In that case, re-upsert rather than killing the session.
           if (!wpData) {
-            // DB was likely wiped, but cookie remained. Invalidate session!
-            return redirect("/api/auth/signout?reason=db_wiped");
+            // Re-upsert the wallet profile using data from the JWT
+            await srClient.from('wallet_profiles').upsert({
+              id: decoded.sub,
+              wallet_address: decoded.wallet,
+            });
           }
           
-          // 2. Optionally fetch email from profiles if linked
-          const { data: pData } = await srClient.from('profiles').select('email, email_confirmed_at').eq('id', decoded.sub).maybeSingle();
+          // Optionally fetch email from profiles if linked
+          const { data: pData } = await srClient
+            .from('profiles')
+            .select('email, email_confirmed_at')
+            .eq('id', decoded.sub)
+            .maybeSingle();
           if (pData) {
             dbEmail = pData.email || "";
             dbEmailConfirmedAt = pData.email_confirmed_at || "";
           }
         }
-      } catch (e) {
-        if ((e as Error).message === "NEXT_REDIRECT") throw e;
-        // If wallet profile doesn't exist, this JWT is effectively dead (stale).
-        return redirect("/api/auth/signout?reason=stale");
+      } catch (dbErr) {
+        // DB is unreachable — log but DO NOT invalidate the session.
+        // The JWT is still cryptographically valid.
+        console.warn("[session] DB check failed (non-fatal), continuing with JWT-only session:", (dbErr as Error).message);
       }
 
       return {
@@ -106,8 +123,8 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         role: 'borrower'
       };
     } catch (error) {
-      if ((error as Error).message === "NEXT_REDIRECT") throw error;
-      // Invalid JWT or legacy token, clear it
+      // Only redirect to signout if the JWT itself is invalid/expired
+      console.warn("[session] JWT verification failed, clearing session:", (error as Error).message);
       return redirect("/api/auth/signout?reason=invalid");
     }
   }

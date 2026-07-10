@@ -90,10 +90,9 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isAuthEntryPath && effectiveUser) {
-    // If we have a session, assume borrower dashboard by default.
-    // The actual page will re-route if needed based on JWT contents.
+    // User already has a valid session — send them to the role picker dashboard
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/dashboard/borrower";
+    redirectUrl.pathname = "/dashboard";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
@@ -101,6 +100,7 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next({ request });
 }
 
+// Exported so middleware.ts can re-export it
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
