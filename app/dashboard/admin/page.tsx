@@ -8,7 +8,7 @@ import {
 } from "@/lib/dashboard/metrics";
 import { getServiceRoleClient } from "@/lib/supabase/server";
 import Link from "next/link";
-
+import { Users, TrendingUp, Activity } from "lucide-react";
 function formatAmount(value: number) {
   return `${value.toFixed(2)} XLM`;
 }
@@ -166,26 +166,74 @@ export default async function AdminDashboardPage() {
           <>
             <section className="workspace-grid workspace-grid--three">
               <article className="workspace-card">
-                <h2 className="workspace-card-title">Users & access</h2>
-                <p className="workspace-card-copy">Active now: {activeUsers}</p>
-                <p className="workspace-card-copy">Total users: {profiles.length}</p>
-                <p className="workspace-card-copy">Borrowers: {borrowersCount}</p>
-                <p className="workspace-card-copy">Lenders: {lendersCount}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <Users size={18} color="#38bdf8" />
+                  <h2 className="workspace-card-title" style={{ margin: 0 }}>Users & Access</h2>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Total Users</p>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{profiles.length}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Active Now</p>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#22cf9d' }}>{activeUsers}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Borrowers</p>
+                    <p style={{ fontSize: '1.25rem', fontWeight: '600' }}>{borrowersCount}</p>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Lenders</p>
+                    <p style={{ fontSize: '1.25rem', fontWeight: '600' }}>{lendersCount}</p>
+                  </div>
+                </div>
               </article>
 
               <article className="workspace-card">
-                <h2 className="workspace-card-title">Loan economy</h2>
-                <p className="workspace-card-copy">Loans sanctioned: {sanctionedLoans.length}</p>
-                <p className="workspace-card-copy">Amount sanctioned: {formatAmount(sanctionedAmount)}</p>
-                <p className="workspace-card-copy">Amount repaid: {formatAmount(repaidAmount)}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <TrendingUp size={18} color="#22cf9d" />
+                  <h2 className="workspace-card-title" style={{ margin: 0 }}>Loan Economy</h2>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Loans Sanctioned</span>
+                    <strong style={{ fontSize: '1.1rem' }}>{sanctionedLoans.length}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Amount Sanctioned</span>
+                    <strong style={{ fontSize: '1.1rem', color: '#38bdf8' }}>{formatAmount(sanctionedAmount)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Amount Repaid</span>
+                    <strong style={{ fontSize: '1.1rem', color: '#22cf9d' }}>{formatAmount(repaidAmount)}</strong>
+                  </div>
+                </div>
               </article>
 
               <article className="workspace-card">
-                <h2 className="workspace-card-title">Transaction flow</h2>
-                <p className="workspace-card-copy">Today: {formatAmount(txToday)}</p>
-                <p className="workspace-card-copy">Weekly: {formatAmount(txWeekly)}</p>
-                <p className="workspace-card-copy">Monthly: {formatAmount(txMonthly)}</p>
-                <p className="workspace-card-copy">All-time: {formatAmount(txAllTime)}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                  <Activity size={18} color="#f5a623" />
+                  <h2 className="workspace-card-title" style={{ margin: 0 }}>Transaction Flow</h2>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '6px' }}>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Today</p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatAmount(txToday)}</p>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '6px' }}>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Weekly</p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatAmount(txWeekly)}</p>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '6px' }}>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Monthly</p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{formatAmount(txMonthly)}</p>
+                  </div>
+                  <div style={{ background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '6px' }}>
+                    <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>All-Time</p>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f5a623' }}>{formatAmount(txAllTime)}</p>
+                  </div>
+                </div>
               </article>
             </section>
 

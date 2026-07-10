@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const { user } = await requireAuthenticatedUser();
 
     // Verify the user has admin wallet (check against env var)
-    const adminAddress = process.env.NEXT_PUBLIC_ADMIN_ADDRESS;
+    const adminAddress = process.env.ADMIN_WALLET_ADDRESS;
     if (!adminAddress || user.wallet !== adminAddress) {
       return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
     }

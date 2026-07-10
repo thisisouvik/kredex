@@ -2,8 +2,8 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'Kredex-super-secret-jwt-key-change-in-prod';
-
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET environment variable is missing. Check your .env file.");
 export async function requireAuthenticatedUser(expectedRole?: string) {
   // Check dev auth bypass first
   const DEV_BYPASS_ENABLED =
@@ -183,5 +183,13 @@ export async function getAuthenticatedUser() {
 }
 
 export async function requireTradeVaultAdmin() {
-  return await requireAuthenticatedUser();
+  const session = await requireAuthenticatedUser();
+  const ADMIN_WALLET = process.env.ADMIN_WALLET_ADDRESS;
+
+  // Security check: Only allow the specific admin wallet address
+  if (!ADMIN_WALLET || session.user.wallet !== ADMIN_WALLET) {
+    redirect("/dashboard/borrower");
+  }
+
+  return session;
 }

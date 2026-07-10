@@ -4,8 +4,8 @@ import { getServerSupabaseClient } from "@/lib/supabase/server";
 import { mapToSep12Status } from "@/lib/kyc/sep12";
 import jwt from "jsonwebtoken";
 
-const KYC_SESSION_SECRET =
-  process.env.JWT_SECRET ?? "Kredex-super-secret-jwt-key-change-in-prod";
+const KYC_SESSION_SECRET = process.env.JWT_SECRET;
+if (!KYC_SESSION_SECRET) throw new Error("JWT_SECRET environment variable is missing. Check your .env file.");
 
 interface ProfileRow {
   id: string;

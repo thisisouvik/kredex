@@ -4,8 +4,8 @@ import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import { redis } from '@/lib/redis/client';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'Kredex-super-secret-jwt-key-change-in-prod';
-
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET environment variable is missing. Check your .env file.");
 // Helper: convert base64url to base64
 function base64urlToBase64(b64url: string): string {
   return b64url.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice((b64url.length * 3) & 3 ? 0 : 1);
