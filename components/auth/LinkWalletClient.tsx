@@ -48,7 +48,7 @@ export function LinkWalletClient({ userId }: { userId: string }) {
       <div className="auth-page-card glass-panel" style={{ textAlign: "center" }}>
         <h1 className="heading-xl" style={{ marginBottom: "0.5rem" }}>Link your Wallet</h1>
         <p className="text-secondary" style={{ marginBottom: "2rem" }}>
-          Your old account needs a Web3 Wallet to interact with the TrustLend platform.
+          Your old account needs a Web3 Wallet to interact with the KRedex platform.
         </p>
 
         {message && (

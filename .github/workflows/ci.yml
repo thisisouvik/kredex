@@ -1,4 +1,4 @@
-name: TrustLend CI/CD
+name: Kredex CI/CD
 
 on:
   push:
