@@ -297,7 +297,21 @@ input, select, textarea { font: inherit; }
 .workspace-error { font-size: 0.82rem; color: var(--red); margin-top: 0.35rem; }
 .workspace-button { width: 100%; padding: 0.85rem; font-size: 0.95rem; font-weight: 600; border-radius: var(--radius-md); border: none; cursor: pointer; transition: all var(--transition); }
 .workspace-button--primary { background: linear-gradient(135deg, var(--indigo), var(--indigo-dark)); color: #fff; }
-.workspace-button--primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px var(--indigo-glow); }
+.workspace-button--primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(126, 47, 208, 0.4);
+}
+
+.workspace-button--secondary {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  width: auto;
+}
+
+.workspace-button--secondary:hover:not(:disabled) {
+  background: var(--border-strong);
+}
 .workspace-button--primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Stat/Metric Cards ─────────────────────────────────────────────────────── */
