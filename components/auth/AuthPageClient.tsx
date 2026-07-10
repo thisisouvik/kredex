@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Loader2, ShieldCheck, Smartphone, Monitor, Fingerprint,
+  Loader2, ShieldCheck, Smartphone, Monitor,
   Wallet, ChevronRight, AlertTriangle
 } from "lucide-react";
 import albedo from "@albedo-link/intent";
@@ -13,14 +13,7 @@ import {
   getAddress,
   signMessage,
 } from "@stellar/freighter-api";
-import {
-  isPasskeySupported,
-  registerPasskey,
-  authenticatePasskey,
-  getStoredCredentialId,
-} from "@/lib/wallet/passkey";
-
-type WalletOption = "freighter" | "albedo" | "passkey";
+type WalletOption = "freighter" | "albedo";
 
 interface AuthMessage {
   type: "error" | "info" | "success";
@@ -33,18 +26,7 @@ export function AuthPageClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeWallet, setActiveWallet] = useState<WalletOption | null>(null);
   const [message, setMessage] = useState<AuthMessage | null>(null);
-  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
-  const [hasExistingPasskey, setHasExistingPasskey] = useState(false);
 
-  // Check passkey support on mount
-  useEffect(() => {
-    isPasskeySupported().then((supported) => {
-      setPasskeyAvailable(supported);
-      if (supported) {
-        setHasExistingPasskey(!!getStoredCredentialId());
-      }
-    });
-  }, []);
 
   // ── Core Auth Flow ──────────────────────────────────────────────────────────
   const runAuthFlow = async (walletAddress: string, walletType: WalletOption, extraBody?: object) => {
@@ -74,16 +56,6 @@ export function AuthPageClient() {
     } else if (walletType === "albedo") {
       const signRes = await albedo.signMessage({ message: nonce, pubkey: walletAddress });
       signPayload = { signature: signRes.message_signature };
-    } else {
-      // Passkey — sign via WebAuthn assertion
-      const credentialId = getStoredCredentialId() ?? undefined;
-      const assertion = await authenticatePasskey(nonce, credentialId);
-      signPayload = {
-        credentialId: assertion.credentialId,
-        clientDataJSON: assertion.clientDataJSON,
-        authenticatorData: assertion.authenticatorData,
-        signatureB64: assertion.signature,
-      };
     }
 
     // 3. Verify and issue session
@@ -147,59 +119,7 @@ export function AuthPageClient() {
     }
   };
 
-  // ── Passkey Handler ─────────────────────────────────────────────────────────
-  const handlePasskey = async () => {
-    setIsLoading(true);
-    setActiveWallet("passkey");
-    setMessage(null);
-    try {
-      const existingCredentialId = getStoredCredentialId();
 
-      if (existingCredentialId) {
-        // ── Returning user — authenticate ──────────────────────────────────
-        // We need a wallet handle first to get a challenge.
-        // The handle is stored with the credential.
-        // We use the credential ID prefix as the wallet handle (same as registration).
-        const walletHandle = `pk_${existingCredentialId.slice(0, 24)}`;
-        await runAuthFlow(walletHandle, "passkey", { credentialId: existingCredentialId });
-        window.location.href = "/dashboard";
-      } else {
-        // ── New user — register passkey ────────────────────────────────────
-        setMessage({ type: "info", text: "Creating your passkey — follow the biometric prompt..." });
-
-        const displayName = `user_${Date.now().toString(36)}`;
-        const reg = await registerPasskey(displayName);
-
-        const regRes = await fetch("/api/auth/passkey/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            walletHandle: reg.walletHandle,
-            credentialId: reg.credentialId,
-            publicKeyBase64: reg.publicKeyBase64,
-          }),
-        });
-        if (!regRes.ok) {
-          const errData = await regRes.json().catch(() => ({}));
-          throw new Error(errData.error || "Failed to register passkey (API error)");
-        }
-
-        // Now authenticate immediately after registration
-        await runAuthFlow(reg.walletHandle, "passkey", { credentialId: reg.credentialId });
-        window.location.href = "/dashboard";
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "NotAllowedError") {
-        setMessage({ type: "error", text: "Biometric authentication was cancelled. Please try again." });
-      } else {
-        const msg = err instanceof Error ? err.message : "Passkey login failed.";
-        setMessage({ type: "error", text: msg });
-      }
-    } finally {
-      setIsLoading(false);
-      setActiveWallet(null);
-    }
-  };
 
   const busy = isLoading;
 
@@ -258,62 +178,13 @@ export function AuthPageClient() {
         {/* Wallet Buttons */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
 
-          {/* Passkey — shown first if supported */}
-          {passkeyAvailable && (
-            <button
-              onClick={handlePasskey}
-              disabled={busy}
-              className="btn btn-primary"
-              style={{
-                padding: "1.2rem 1.5rem",
-                justifyContent: "space-between",
-                background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
-                border: "none",
-                position: "relative",
-                overflow: "hidden",
-                whiteSpace: "normal",
-                textAlign: "left",
-                gap: "1rem",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flex: 1, minWidth: 0 }}>
-                {isLoading && activeWallet === "passkey" ? (
-                  <Loader2 size={22} className="animate-spin" style={{ flexShrink: 0 }} />
-                ) : (
-                  <Fingerprint size={22} style={{ flexShrink: 0 }} />
-                )}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: "1rem" }}>
-                    {hasExistingPasskey ? "Continue with Passkey" : "Create Passkey"}
-                  </div>
-                  <div style={{ fontSize: "0.75rem", opacity: 0.8, marginTop: "1px", lineHeight: 1.3 }}>
-                    Face ID · Touch ID · Fingerprint
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-                <span className="recommended-badge" style={{
-                  background: "rgba(255,255,255,0.2)",
-                  fontSize: "0.6rem",
-                  fontWeight: 800,
-                  padding: "2px 7px",
-                  borderRadius: "999px",
-                  letterSpacing: "0.08em"
-                }}>
-                  RECOMMENDED
-                </span>
-                <ChevronRight size={18} />
-              </div>
-            </button>
-          )}
-
           {/* Divider */}
           <div style={{
             display: "flex", alignItems: "center", gap: "0.75rem",
             color: "var(--text-secondary)", fontSize: "0.8rem"
           }}>
             <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-            {passkeyAvailable ? "Or use a Stellar wallet" : "Select a wallet"}
+            Select a wallet
             <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
           </div>
 

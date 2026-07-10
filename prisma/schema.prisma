@@ -11,27 +11,33 @@ datasource db {
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum KycStatus {
-  PENDING
-  SUBMITTED
-  VERIFIED
-  REJECTED
+  PENDING   @map("pending")
+  SUBMITTED @map("submitted")
+  VERIFIED  @map("verified")
+  REJECTED  @map("rejected")
+
+  @@map("kyc_status")
 }
 
 enum RiskStatus {
-  LOW
-  MEDIUM
-  HIGH
-  BLOCKED
+  LOW     @map("low")
+  MEDIUM  @map("medium")
+  HIGH    @map("high")
+  BLOCKED @map("blocked")
+
+  @@map("risk_status")
 }
 
 enum LoanStatus {
-  REQUESTED
-  APPROVED
-  FUNDED
-  ACTIVE
-  REPAID
-  DEFAULTED
-  CANCELLED
+  REQUESTED @map("requested")
+  APPROVED  @map("approved")
+  FUNDED    @map("funded")
+  ACTIVE    @map("active")
+  REPAID    @map("repaid")
+  DEFAULTED @map("defaulted")
+  CANCELLED @map("cancelled")
+
+  @@map("loan_status")
 }
 
 // ─── Models ───────────────────────────────────────────────────────────────────

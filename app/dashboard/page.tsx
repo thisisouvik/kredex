@@ -11,17 +11,18 @@ export default async function UnifiedDashboardPage() {
   let activeLendingsCount = 0;
 
   try {
+    const { LoanStatus } = await import("@prisma/client");
     activeBorrowingsCount = await prisma.loan.count({
       where: {
         borrowerId: user.id,
-        status: { in: ["REQUESTED", "APPROVED", "FUNDED", "ACTIVE"] },
+        status: { in: [LoanStatus.REQUESTED, LoanStatus.APPROVED, LoanStatus.FUNDED, LoanStatus.ACTIVE] },
       },
     });
 
     activeLendingsCount = await prisma.loan.count({
       where: {
         lenderId: user.id,
-        status: { in: ["APPROVED", "FUNDED", "ACTIVE"] },
+        status: { in: [LoanStatus.APPROVED, LoanStatus.FUNDED, LoanStatus.ACTIVE] },
       },
     });
   } catch (dbError) {

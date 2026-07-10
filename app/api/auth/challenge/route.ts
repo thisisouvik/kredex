@@ -10,10 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
     }
 
-    // For passkey wallets, credentialId is required
-    if (authType === 'passkey' && !credentialId) {
-      return NextResponse.json({ error: 'credentialId required for passkey auth' }, { status: 400 });
-    }
+
 
     const nonce = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 

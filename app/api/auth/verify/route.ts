@@ -32,22 +32,7 @@ export async function POST(req: Request) {
     const { nonce } = challengeData;
 
     // ── Verify Signature by auth type ────────────────────────────────────────
-    if (authType === 'passkey') {
-      // WebAuthn passkey path — verify the nonce is embedded in the clientDataJSON
-      const { credentialId, clientDataJSON, authenticatorData, signatureB64 } = body;
-      if (!credentialId || !clientDataJSON || !authenticatorData || !signatureB64) {
-        return NextResponse.json({ error: 'Missing passkey assertion fields' }, { status: 400 });
-      }
-
-      // clientDataJSON challenge is base64url-encoded UTF-8 of the nonce
-      const clientData = JSON.parse(Buffer.from(clientDataJSON, 'base64url').toString('utf8'));
-      const challengeInAssertion = Buffer.from(clientData.challenge, 'base64url').toString('utf8');
-
-      if (challengeInAssertion !== nonce) {
-        return NextResponse.json({ error: 'Challenge mismatch — passkey authentication failed.' }, { status: 401 });
-      }
-
-    } else if (authType === 'freighter' || authType === 'albedo') {
+    if (authType === 'freighter' || authType === 'albedo') {
       // Ed25519 path — Freighter / Albedo traditional wallet
       if (!signature) {
         return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
