@@ -2213,3 +2213,61 @@ input, select, textarea { font: inherit; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WORKSPACE TABLE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.workspace-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.workspace-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  min-width: 600px;
+}
+
+.workspace-table th {
+  padding: 1.25rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.workspace-table td {
+  padding: 1.25rem 1rem;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+.workspace-table tr:last-child td {
+  border-bottom: none;
+}
+
+.workspace-table tr {
+  transition: background-color 0.2s ease;
+}
+
+.workspace-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid, .role-metrics {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
