@@ -111,6 +111,11 @@ async function main() {
   const lender = await ensureUser(supabase, "e2e.lender@trustlend.local", "lender", "E2E Lender");
   const admin = await ensureUser(supabase, "souvikmandal2406@gmail.com", "admin", "E2E Admin");
 
+  // Clean up previous runs' test data to ensure fresh state
+  await supabase.from("loans").delete().eq("borrower_id", borrower.id);
+  await supabase.from("pool_positions").delete().eq("lender_id", lender.id);
+  await supabase.from("ledger_transactions").delete().in("user_id", [borrower.id, lender.id]);
+
   // Ensure borrower can request loans.
   const { error: repErr } = await supabase.from("reputation_snapshots").upsert({
     user_id: borrower.id,
