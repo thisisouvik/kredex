@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAlert } from "@/components/ui/AlertProvider";
 import { updateUserProfile } from "@/app/actions/update-profile";
 import { uploadKYCDocument } from "@/app/actions/kyc-upload";
 
@@ -95,6 +96,7 @@ export function ProfileSettingsForm({
   };
 
   const docLocked = hasGovId && kycStatus !== "pending";
+  const { showAlert } = useAlert();
 
   const handleLogout = async () => {
     setSigningOut(true);
@@ -104,8 +106,12 @@ export function ProfileSettingsForm({
       if (supabase) {
         await supabase.auth.signOut();
       }
-      // Redirect to the signout route to clear httpOnly cookies
-      window.location.href = "/api/auth/signout";
+      showAlert("Farewell!", "Successfully signed out. See you next time.", "success", 3000);
+      
+      // Delay to let the user see the alert
+      setTimeout(() => {
+        window.location.href = "/api/auth/signout";
+      }, 1500);
     } catch (err) {
       console.error("Logout failed:", err);
       setSigningOut(false);

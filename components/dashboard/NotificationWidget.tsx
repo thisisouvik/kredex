@@ -29,9 +29,20 @@ export function NotificationWidget() {
       }
     }
     fetchNotifs();
-    // Poll every 30s
+    
+    // Listen for real-time notifications dispatched by RealtimeNotifications.tsx
+    const handleNewNotification = (e: Event) => {
+      const customEvent = e as CustomEvent<Notification>;
+      setNotifications((prev) => [customEvent.detail, ...prev]);
+    };
+    window.addEventListener("new_notification", handleNewNotification);
+
+    // Poll every 30s as a fallback
     const interval = setInterval(fetchNotifs, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("new_notification", handleNewNotification);
+    };
   }, []);
 
   useEffect(() => {

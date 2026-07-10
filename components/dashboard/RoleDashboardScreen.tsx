@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getBrowserSupabaseClient } from "@/lib/supabase/client";
+import { useAlert } from "@/components/ui/AlertProvider";
 import {
   getDashboardPath,
   isUserRole,
@@ -99,6 +100,8 @@ export function RoleDashboardScreen({
     };
   }, [expectedRole, router]);
 
+  const { showAlert } = useAlert();
+
   const handleSignOut = async () => {
     const supabase = getBrowserSupabaseClient();
     if (!supabase) {
@@ -106,7 +109,10 @@ export function RoleDashboardScreen({
     }
 
     await supabase.auth.signOut();
-    router.replace("/");
+    showAlert("Farewell!", "Successfully signed out. See you next time.", "success", 3000);
+    setTimeout(() => {
+      window.location.href = "/api/auth/signout";
+    }, 1500);
   };
 
   if (error) {

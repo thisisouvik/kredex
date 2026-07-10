@@ -54,6 +54,7 @@ export const metadata: Metadata = {
 };
 
 import { WalkthroughOverlay } from "@/components/walkthrough/WalkthroughOverlay";
+import { AlertProvider } from "@/components/ui/AlertProvider";
 
 export default function RootLayout({
   children,
@@ -67,8 +68,10 @@ export default function RootLayout({
         style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}
         suppressHydrationWarning
       >
-        {children}
-        <WalkthroughOverlay />
+        <AlertProvider>
+          {children}
+          <WalkthroughOverlay />
+        </AlertProvider>
         <Analytics />
       </body>
     </html>

@@ -15,17 +15,14 @@ import {
 } from "@stellar/freighter-api";
 type WalletOption = "freighter" | "albedo";
 
-interface AuthMessage {
-  type: "error" | "info" | "success";
-  text: string;
-}
+import { useAlert } from "@/components/ui/AlertProvider";
 
 export function AuthPageClient() {
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
   const [activeWallet, setActiveWallet] = useState<WalletOption | null>(null);
-  const [message, setMessage] = useState<AuthMessage | null>(null);
+  const { showAlert } = useAlert();
 
 
   // ── Core Auth Flow ──────────────────────────────────────────────────────────
@@ -79,11 +76,10 @@ export function AuthPageClient() {
   const handleFreighter = async () => {
     setIsLoading(true);
     setActiveWallet("freighter");
-    setMessage(null);
     try {
       const connected = await isConnected();
       if (!connected) {
-        setMessage({ type: "error", text: "Freighter is not installed or locked. Install it from freighter.app" });
+        showAlert("Wallet Not Found", "Freighter is not installed or locked. Install it from freighter.app to continue.", "error", 6000);
         return;
       }
       await setAllowed();
@@ -91,10 +87,15 @@ export function AuthPageClient() {
       if (res.error) throw new Error(res.error);
 
       await runAuthFlow(res.address, "freighter");
-      window.location.href = "/dashboard";
+      showAlert("Welcome back!", "Successfully signed in with Freighter.", "success", 3000);
+      
+      // Delay redirect slightly so the user sees the welcome alert
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 1500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Freighter login failed.";
-      setMessage({ type: "error", text: msg });
+      showAlert("Authentication Failed", msg, "error");
     } finally {
       setIsLoading(false);
       setActiveWallet(null);
@@ -105,14 +106,22 @@ export function AuthPageClient() {
   const handleAlbedo = async () => {
     setIsLoading(true);
     setActiveWallet("albedo");
-    setMessage(null);
     try {
-      const res = await albedo.publicKey({});
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Request is taking a long time. Please retry after some time.")), 15000)
+      );
+      
+      // @ts-ignore
+      const res = await Promise.race([albedo.publicKey({}), timeoutPromise]);
       await runAuthFlow(res.pubkey, "albedo");
-      window.location.href = "/dashboard";
+      
+      showAlert("Welcome back!", "Successfully signed in with Albedo.", "success", 3000);
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 1500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Albedo login failed.";
-      setMessage({ type: "error", text: msg });
+      showAlert("Authentication Failed", msg, "error");
     } finally {
       setIsLoading(false);
       setActiveWallet(null);
@@ -148,32 +157,7 @@ export function AuthPageClient() {
           </p>
         </div>
 
-        {/* Message */}
-        {message && (
-          <div
-            className={`auth-alert auth-alert--${message.type}`}
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "0.75rem",
-              marginBottom: "1.5rem",
-              padding: "0.9rem 1.1rem",
-              borderRadius: "10px",
-              background: message.type === "error"
-                ? "rgba(239,68,68,0.12)"
-                : message.type === "success"
-                  ? "rgba(34,207,157,0.12)"
-                  : "rgba(96,165,250,0.12)",
-              border: `1px solid ${message.type === "error" ? "rgba(239,68,68,0.3)" : message.type === "success" ? "rgba(34,207,157,0.3)" : "rgba(96,165,250,0.3)"}`,
-            }}
-          >
-            {message.type === "error"
-              ? <AlertTriangle size={18} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />
-              : <ShieldCheck size={18} style={{ color: "#22cf9d", flexShrink: 0, marginTop: 2 }} />
-            }
-            <span style={{ fontSize: "0.9rem", lineHeight: 1.5 }}>{message.text}</span>
-          </div>
-        )}
+
 
         {/* Wallet Buttons */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
@@ -257,7 +241,6 @@ export function AuthPageClient() {
           <button
             onClick={async () => {
               setIsLoading(true);
-              setMessage(null);
               try {
                 const { getBrowserSupabaseClient } = await import("@/lib/supabase/client");
                 const supabase = getBrowserSupabaseClient();
@@ -269,8 +252,8 @@ export function AuthPageClient() {
                 });
                 if (error) throw error;
               } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : "Google login failed.";
-                setMessage({ type: "error", text: msg });
+                const msg = err instanceof Error ? err.message : "Social login failed.";
+                showAlert("Authentication Failed", msg, "error");
                 setIsLoading(false);
               }
             }}
