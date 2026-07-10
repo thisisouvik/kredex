@@ -24,6 +24,9 @@ export function AuthPageClient() {
   const [activeWallet, setActiveWallet] = useState<WalletOption | null>(null);
   const { showAlert } = useAlert();
 
+  useEffect(() => {
+    // Component mounted
+  }, []);
 
   // ── Core Auth Flow ──────────────────────────────────────────────────────────
   const runAuthFlow = async (walletAddress: string, walletType: WalletOption, extraBody?: object) => {
@@ -41,9 +44,8 @@ export function AuthPageClient() {
     if (walletType === "freighter") {
       try {
         const signRes = await signMessage(nonce);
-        // Freighter v6 returns { signedMessage: string, signerAddress: string }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sig = (signRes as any).signedMessage || (signRes as any).signature || (typeof signRes === "string" ? signRes : "");
+        // @ts-expect-error Freighter returns varying signature payload formats depending on version
+        const sig = signRes.signedMessage || signRes.signature || (typeof signRes === "string" ? signRes : "");
         if (!sig) throw new Error("Wallet returned empty signature");
         signPayload = { signature: sig };
       } catch (e: unknown) {
@@ -111,7 +113,6 @@ export function AuthPageClient() {
         setTimeout(() => reject(new Error("Request is taking a long time. Please retry after some time.")), 15000)
       );
       
-      // @ts-ignore
       const res = await Promise.race([albedo.publicKey({}), timeoutPromise]);
       await runAuthFlow(res.pubkey, "albedo");
       

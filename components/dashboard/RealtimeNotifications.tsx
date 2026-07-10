@@ -32,12 +32,12 @@ export function RealtimeNotifications() {
             filter: `user_id=eq.${userId}`,
           },
           (payload) => {
-            const newNotification = payload.new as any;
+            const newNotification = payload.new as Record<string, unknown>;
             
             // Trigger the global bottom-right alert
             showAlert(
-              newNotification.title || "New Notification",
-              newNotification.message || "",
+              (newNotification.title as string) || "New Notification",
+              (newNotification.message as string) || "",
               "success",
               6000
             );
