@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
-if (process.env.NODE_ENV !== "production") {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-}
+// Note: NODE_TLS_REJECT_UNAUTHORIZED is intentionally NOT disabled here.
+// Use the Supabase connection pooler URL in DATABASE_URL for production
+// (postgres://...pooler.supabase.com:6543/postgres?pgbouncer=true)
 
 const securityHeaders = [
   // Content Security Policy — restricts where resources can load from
