@@ -3,13 +3,13 @@ import { TasksBoard } from "@/components/dashboard/TasksBoard";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getBorrowerDashboardMetrics, presentBorrowerMetrics } from "@/lib/dashboard/metrics";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { getPlatformTasks } from "@/app/api/tasks/complete/route";
 
 export default async function BorrowerTasksPage() {
   const { user } = await requireAuthenticatedUser("borrower");
   const metrics = await getBorrowerDashboardMetrics(user.id);
-  const supabase = await getServerSupabaseClient();
+  const supabase = getServiceRoleClient();
 
   const [profileRes, completedEventsRes] = supabase
     ? await Promise.all([

@@ -2,7 +2,7 @@ import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { LoanMarketplace } from "@/components/dashboard/LoanMarketplace";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getLenderDashboardMetrics, presentLenderMetrics } from "@/lib/dashboard/metrics";
-import { getServerSupabaseClient, getServiceRoleClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
 import { buildStellarTxVerificationUrl, isLikelyTxHash } from "@/lib/stellar/explorer";
 
@@ -11,7 +11,7 @@ export default async function LenderMarketplacePage() {
   const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
   const metrics = await getLenderDashboardMetrics(user.id);
 
-  const supabase  = await getServerSupabaseClient();
+  const supabase  = getServiceRoleClient();
   const srClient = getServiceRoleClient();
 
   // ── Own funded loan records (ledger) ─────────────────────────────────────

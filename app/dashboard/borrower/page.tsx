@@ -6,7 +6,7 @@ import {
   getBorrowerDashboardMetrics,
   presentBorrowerMetrics,
 } from "@/lib/dashboard/metrics";
-import { getServerSupabaseClient, getServiceRoleClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { buildStellarTxVerificationUrl, extractPossibleTxHash, isLikelyTxHash } from "@/lib/stellar/explorer";
 import { BorrowerRepayWidget } from "@/components/dashboard/BorrowerRepayWidget";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
@@ -16,7 +16,7 @@ export default async function BorrowerDashboardPage() {
   const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
   const metrics = await getBorrowerDashboardMetrics(user.id);
 
-  const supabase = await getServerSupabaseClient();
+  const supabase = getServiceRoleClient();
   const srClient = getServiceRoleClient();
 
   const [profileRes, loansRes] = supabase

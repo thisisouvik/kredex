@@ -3,7 +3,7 @@ import { LenderForms } from "@/components/dashboard/LenderForms";
 import { InteractiveLineChart } from "@/components/dashboard/InteractiveLineChart";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getLenderDashboardMetrics, presentLenderMetrics } from "@/lib/dashboard/metrics";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
 import { formatCurrency } from "@/lib/utils/formatting";
 import { isLikelyTxHash, buildStellarTxVerificationUrl } from "@/lib/stellar/explorer";
@@ -11,7 +11,7 @@ import { isLikelyTxHash, buildStellarTxVerificationUrl } from "@/lib/stellar/exp
 export default async function LenderPoolsPage() {
   const { user } = await requireAuthenticatedUser("lender");
   const metrics = await getLenderDashboardMetrics(user.id);
-  const supabase = await getServerSupabaseClient();
+  const supabase = getServiceRoleClient();
 
   const [poolsRes, positionsRes, profileRes, txHistoryRes] = supabase
     ? await Promise.all([

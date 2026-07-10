@@ -3,14 +3,14 @@ import { BorrowerRepayWidget } from "@/components/dashboard/BorrowerRepayWidget"
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getBorrowerDashboardMetrics, presentBorrowerMetrics } from "@/lib/dashboard/metrics";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/Badge";
 
 export default async function BorrowerRepayPage() {
   const { user } = await requireAuthenticatedUser("borrower");
   const metrics  = await getBorrowerDashboardMetrics(user.id);
 
-  const supabase = await getServerSupabaseClient();
+  const supabase = getServiceRoleClient();
   const [loansRes, profileRes] = supabase
     ? await Promise.all([
         supabase

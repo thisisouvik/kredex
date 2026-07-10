@@ -1,7 +1,7 @@
 import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getBorrowerDashboardMetrics, presentBorrowerMetrics } from "@/lib/dashboard/metrics";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { buildStellarTxVerificationUrl, isLikelyTxHash } from "@/lib/stellar/explorer";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
 
@@ -9,7 +9,7 @@ export default async function BorrowerHistoryPage() {
   const { user } = await requireAuthenticatedUser("borrower");
   const metrics  = await getBorrowerDashboardMetrics(user.id);
 
-  const supabase = await getServerSupabaseClient();
+  const supabase = getServiceRoleClient();
 
   const [profileRes, loansRes] = supabase
     ? await Promise.all([

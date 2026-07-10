@@ -2,7 +2,7 @@ import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { WalletCard } from "@/components/dashboard/WalletCard";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getLenderDashboardMetrics, presentLenderMetrics } from "@/lib/dashboard/metrics";
-import { getServerSupabaseClient, getServiceRoleClient } from "@/lib/supabase/server";
+import { getServiceRoleClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils/formatting";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
 import Link from "next/link";
@@ -11,7 +11,7 @@ export default async function LenderHomePage() {
   const { user } = await requireAuthenticatedUser("lender");
   const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
   const metrics = await getLenderDashboardMetrics(user.id);
-  const supabase = await getServerSupabaseClient();
+  const supabase = getServiceRoleClient();
   const srClient = getServiceRoleClient();
 
   const [positionsRes, profileRes, p2pRes, openLoanCountRes] = supabase && srClient
