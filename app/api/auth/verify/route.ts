@@ -137,11 +137,23 @@ export async function POST(req: Request) {
       { expiresIn: '7d' }
     );
 
-    // ── Return the JWT for client-side cookie setting ─────────────────────────
-    // Server-side Set-Cookie headers are being silently dropped by Vercel's
-    // edge/middleware layer. Return the token in the JSON response so the
-    // frontend can set the cookie reliably via document.cookie.
-    return NextResponse.json({ success: true, wallet: walletAddress, token });
+    // ── Issue session cookie AND return token ────────────────────────────────
+    // Method 1: Set cookie server-side directly in this response (most reliable)
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieMaxAge = 7 * 24 * 60 * 60; // 7 days in seconds
+
+    const response = NextResponse.json({ success: true, wallet: walletAddress, token });
+
+    // Set the httpOnly cookie on the response — this is Method 1
+    response.cookies.set('Kredex_session', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: cookieMaxAge,
+      path: '/',
+    });
+
+    return response;
 
   } catch (error) {
     console.error('Verify error:', error);

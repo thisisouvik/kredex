@@ -71,10 +71,19 @@ export function AuthPageClient() {
     const verifyData = await verifyRes.json();
     if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
 
-    // 4. Let the server set the session cookie via a redirect.
-    // We redirect through /api/auth/set-session which sets a proper
-    // httpOnly cookie server-side — reliable on Vercel, no edge stripping.
+    // Method 1: Cookie already set server-side by /api/auth/verify response headers.
+    // Method 2: Redirect through /api/auth/set-session to set cookie via server redirect.
+    // Method 3: document.cookie as client-side fallback (non-httpOnly but reliable).
+    // All three methods run — at least one will work in any environment.
     if (verifyData.token) {
+      // Method 3: client-side cookie (fallback)
+      try {
+        const isProd = window.location.protocol === "https:";
+        const maxAge = 7 * 24 * 60 * 60;
+        document.cookie = `Kredex_session=${verifyData.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${isProd ? "; Secure" : ""}`;
+      } catch (_) { /* ignore */ }
+
+      // Method 2: server-side redirect (sets httpOnly cookie)
       return { ...verifyData, redirectUrl: `/api/auth/set-session?t=${encodeURIComponent(verifyData.token)}` };
     }
 

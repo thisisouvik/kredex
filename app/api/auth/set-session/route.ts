@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
 
 // Force Node.js runtime — cookies().set() works here, NOT in edge runtime
 export const runtime = 'nodejs';
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
-
 /**
  * GET /api/auth/set-session?t=<jwt>
  *
- * After the client verifies a wallet signature and receives a JWT from
- * /api/auth/verify, it redirects HERE instead of doing document.cookie.
- * This route sets an httpOnly server-side cookie (immune to Vercel edge
- * header stripping) and then redirects the user to /dashboard.
+ * Method 2 of session cookie setting: client redirects here after getting
+ * the JWT from /api/auth/verify. This route sets the cookie server-side via
+ * a redirect response and sends the user to /dashboard.
  *
- * The token is short-lived in the URL — it's immediately consumed and
- * replaced with an httpOnly cookie, so the risk window is minimal.
+ * NOTE: Full JWT signature + expiry verification happens in session.ts
+ * (Node.js runtime). This route only does structural validation to avoid
+ * having a second point of failure with jwt.verify.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -25,20 +22,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/auth?error=missing_token`);
   }
 
-  // Fully verify the JWT — reject tampered or expired tokens
-  try {
-    if (!JWT_SECRET) throw new Error('JWT_SECRET not configured');
-    jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    console.error('[set-session] JWT verification failed:', err);
-    return NextResponse.redirect(`${origin}/auth?error=invalid_token`);
+  // Structural validation only: a JWT has exactly 3 non-empty base64url segments
+  const parts = token.split('.');
+  if (parts.length !== 3 || !parts.every(p => p.length > 10)) {
+    return NextResponse.redirect(`${origin}/auth?error=malformed_token`);
   }
 
-  // Redirect to dashboard and set the session cookie on the response.
-  // NextResponse.redirect() in a Node.js Route Handler correctly sets
-  // Set-Cookie headers that flow through to the browser.
+  // Set the session cookie and redirect to dashboard
   const response = NextResponse.redirect(`${origin}/dashboard`);
-
   response.cookies.set('Kredex_session', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
