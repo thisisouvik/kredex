@@ -13,6 +13,7 @@ import {
   getAddress,
   signMessage,
 } from "@stellar/freighter-api";
+import { setSessionCookie } from "@/app/actions/auth-session";
 type WalletOption = "freighter" | "albedo";
 
 import { useAlert } from "@/components/ui/AlertProvider";
@@ -71,20 +72,11 @@ export function AuthPageClient() {
     const verifyData = await verifyRes.json();
     if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
 
-    // Method 1: Cookie already set server-side by /api/auth/verify response headers.
-    // Method 2: Redirect through /api/auth/set-session to set cookie via server redirect.
-    // Method 3: document.cookie as client-side fallback (non-httpOnly but reliable).
-    // All three methods run — at least one will work in any environment.
+    // ── Set session cookie via Server Action (100% reliable on Vercel) ─────────
+    // Server Actions use Next.js's own cookie mutation API — cannot be stripped
+    // by middleware, CDN, or Vercel's edge layer. This is the correct approach.
     if (verifyData.token) {
-      // Method 3: client-side cookie (fallback)
-      try {
-        const isProd = window.location.protocol === "https:";
-        const maxAge = 7 * 24 * 60 * 60;
-        document.cookie = `Kredex_session=${verifyData.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${isProd ? "; Secure" : ""}`;
-      } catch (_) { /* ignore */ }
-
-      // Method 2: server-side redirect (sets httpOnly cookie)
-      return { ...verifyData, redirectUrl: `/api/auth/set-session?t=${encodeURIComponent(verifyData.token)}` };
+      await setSessionCookie(verifyData.token);
     }
 
     return verifyData;
@@ -107,9 +99,9 @@ export function AuthPageClient() {
       const data = await runAuthFlow(res.address, "freighter");
       showAlert("Welcome back!", "Successfully signed in with Freighter.", "success", 3000);
 
-      // Redirect through server-side cookie setter so the session cookie is set
-      // as a proper httpOnly cookie, not via document.cookie.
-      const dest = data?.redirectUrl ?? "/dashboard";
+      // Cookie is already set by the server action inside runAuthFlow.
+      // Navigate directly to the dashboard.
+      const dest = (data as { redirectUrl?: string })?.redirectUrl ?? "/dashboard";
       setTimeout(() => {
         window.location.href = dest;
       }, 1500);
@@ -135,7 +127,8 @@ export function AuthPageClient() {
       const data = await runAuthFlow(res.pubkey, "albedo");
 
       showAlert("Welcome back!", "Successfully signed in with Albedo.", "success", 3000);
-      const dest = data?.redirectUrl ?? "/dashboard";
+      // Cookie is already set by the server action inside runAuthFlow.
+      const dest = (data as { redirectUrl?: string })?.redirectUrl ?? "/dashboard";
       setTimeout(() => {
         window.location.href = dest;
       }, 1500);
