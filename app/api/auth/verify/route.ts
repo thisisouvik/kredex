@@ -137,22 +137,32 @@ export async function POST(req: Request) {
       { expiresIn: '7d' }
     );
 
-    // ── Issue Session Cookie on the Response ──────────────────────────────────
-    // IMPORTANT: Set the cookie directly on the response object, NOT via
-    // (await cookies()).set(). The latter modifies Next.js's internal store
-    // but does NOT guarantee the Set-Cookie header appears on the actual HTTP
-    // response when returning a custom NextResponse — especially on Vercel.
-    const response = NextResponse.json({ success: true, wallet: walletAddress });
+    // ── Issue Session Cookie — raw header approach ───────────────────────────
+    // Set the Set-Cookie header manually to guarantee it's on the response.
+    // NextResponse.cookies.set() and (await cookies()).set() have both had
+    // inconsistent behavior on Vercel production. Raw header construction is
+    // the most reliable method across all Next.js versions.
+    const maxAge = 7 * 24 * 60 * 60; // 7 days in seconds
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieHeader = [
+      `Kredex_session=${token}`,
+      `Path=/`,
+      `HttpOnly`,
+      isProduction ? `Secure` : '',
+      `SameSite=Lax`,
+      `Max-Age=${maxAge}`,
+    ].filter(Boolean).join('; ');
 
-    response.cookies.set({
-      name: 'Kredex_session',
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60,
-    });
+    const response = new Response(
+      JSON.stringify({ success: true, wallet: walletAddress }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': cookieHeader,
+        },
+      }
+    );
 
     return response;
 
