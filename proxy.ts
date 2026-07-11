@@ -57,31 +57,17 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // ── ③ Custom JWT Session Check (replaces Supabase Auth) ─────────────────────
-  // We use our own JWT stored in the Kredex_session cookie
+  // ── ③ Session Cookie Check ──────────────────────────────────────────────────
+  // The proxy runs in Vercel Edge Runtime where crypto APIs are limited.
+  // We do a lightweight STRUCTURAL check here — three non-empty base64url segments
+  // is the universal shape of a JWT. Full signature + expiry verification happens
+  // in session.ts which runs in the Node.js runtime.
   const sessionCookie = request.cookies.get("Kredex_session");
-  
   let hasSession = false;
   if (sessionCookie?.value) {
-    try {
-      const parts = sessionCookie.value.split('.');
-      if (parts.length === 3) {
-        // Vercel Edge Runtime does not support Node.js Buffer. Use standard Web API atob.
-        // JWT uses base64url, so we must convert to standard base64 first.
-        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        // Pad with '=' if necessary
-        const padLength = (4 - (base64.length % 4)) % 4;
-        const paddedBase64 = base64 + '='.repeat(padLength);
-        
-        const payloadStr = atob(paddedBase64);
-        const payload = JSON.parse(payloadStr);
-        if (payload.sub && isValidUuid(payload.sub)) {
-          hasSession = true;
-        }
-      }
-    } catch (e) {
-      hasSession = false;
-    }
+    const parts = sessionCookie.value.split('.');
+    // A valid JWT always has exactly 3 non-empty segments
+    hasSession = parts.length === 3 && parts.every(p => p.length > 10);
   }
 
   const effectiveUser = bypassActive ? true : hasSession;
