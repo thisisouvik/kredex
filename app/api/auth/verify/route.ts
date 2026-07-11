@@ -137,34 +137,11 @@ export async function POST(req: Request) {
       { expiresIn: '7d' }
     );
 
-    // ── Issue Session Cookie — raw header approach ───────────────────────────
-    // Set the Set-Cookie header manually to guarantee it's on the response.
-    // NextResponse.cookies.set() and (await cookies()).set() have both had
-    // inconsistent behavior on Vercel production. Raw header construction is
-    // the most reliable method across all Next.js versions.
-    const maxAge = 7 * 24 * 60 * 60; // 7 days in seconds
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieHeader = [
-      `Kredex_session=${token}`,
-      `Path=/`,
-      `HttpOnly`,
-      isProduction ? `Secure` : '',
-      `SameSite=Lax`,
-      `Max-Age=${maxAge}`,
-    ].filter(Boolean).join('; ');
-
-    const response = new Response(
-      JSON.stringify({ success: true, wallet: walletAddress }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Set-Cookie': cookieHeader,
-        },
-      }
-    );
-
-    return response;
+    // ── Return the JWT for client-side cookie setting ─────────────────────────
+    // Server-side Set-Cookie headers are being silently dropped by Vercel's
+    // edge/middleware layer. Return the token in the JSON response so the
+    // frontend can set the cookie reliably via document.cookie.
+    return NextResponse.json({ success: true, wallet: walletAddress, token });
 
   } catch (error) {
     console.error('Verify error:', error);

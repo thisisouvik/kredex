@@ -71,6 +71,14 @@ export function AuthPageClient() {
     const verifyData = await verifyRes.json();
     if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
 
+    // 4. Manually store the session cookie client-side
+    // This bypasses the Vercel strict middleware layer stripping server Set-Cookie headers
+    if (verifyData.token) {
+      const isProd = window.location.protocol === "https:";
+      const maxAge = 7 * 24 * 60 * 60; // 7 days
+      document.cookie = `Kredex_session=${verifyData.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${isProd ? "; Secure" : ""}`;
+    }
+
     return verifyData;
   };
 
