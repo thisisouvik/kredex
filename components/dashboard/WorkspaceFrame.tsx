@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { NotificationWidget } from "./NotificationWidget";
 import { RealtimeNotifications } from "./RealtimeNotifications";
+import { UrlAlerts } from "./UrlAlerts";
 import {
   LayoutDashboard, CreditCard, History, User, Settings,
   TrendingUp, Briefcase, ShoppingBag, Shield
@@ -174,8 +175,9 @@ export function WorkspaceFrame({
 
           {/* ── Main panel ───────────────────────────────────────────── */}
           <div className="workspace-main-panel">
-            {/* Real-Time Websocket Listener */}
+            {/* Real-Time Websocket Listener & URL-based Alerts */}
             <RealtimeNotifications />
+            <UrlAlerts />
 
             {/* Topbar */}
             <header className="workspace-topbar">

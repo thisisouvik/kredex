@@ -91,8 +91,9 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         role: "borrower",
       };
     } catch (jwtError) {
-      // JWT is expired or tampered — temporarily bypassing error for testing
-      console.error("[session] JWT invalid, bypassing for test:", (jwtError as Error).message);
+      // JWT is expired or tampered — clear and redirect to sign in.
+      console.error("[session] JWT invalid:", (jwtError as Error).message);
+      return redirect("/api/auth/signout?reason=invalid");
     }
   }
 
@@ -107,40 +108,22 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         const { data: profile } = await supabase.from('profiles').select('wallet_address, role').eq('id', user.id).maybeSingle();
         if (!profile?.wallet_address) {
            // User logged in via Google but hasn't linked a wallet yet!
-           // TEMPORARY BYPASS
-           // redirect("/auth/link-wallet");
+           redirect("/auth/link-wallet");
         }
         return {
           user: {
             ...user,
-            wallet: profile?.wallet_address || "GBYPASSADDRESS0000000000000000000000000000000000000000000"
+            wallet: profile.wallet_address
           },
-          role: profile?.role || expectedRole || 'borrower'
+          role: profile.role || 'borrower'
         };
       }
     }
   } catch (err) {
-    // Ignore
+    // Ignore and redirect
   }
 
-  // TEMPORARY BYPASS: Do not redirect to auth, return a mock user
-  console.error("[session] Auth missing/failed, returning mock testing user");
-  return {
-    user: {
-      id: "00000000-0000-4000-8000-000000000000",
-      wallet: "GBYPASSADDRESS0000000000000000000000000000000000000000000",
-      email: "testing@kredex.dev",
-      user_metadata: {
-        account_type: expectedRole || "borrower",
-        full_name: `Testing User`,
-        wallet_address: "GBYPASSADDRESS0000000000000000000000000000000000000000000"
-      },
-      email_confirmed_at: "",
-      created_at: new Date().toISOString(),
-      last_sign_in_at: new Date().toISOString(),
-    },
-    role: expectedRole || "borrower"
-  };
+  redirect("/auth");
 }
 
 export async function getAuthenticatedUser() {
