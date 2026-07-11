@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Loader2, ShieldCheck, Smartphone, Monitor,
-  Wallet, ChevronRight, AlertTriangle
-} from "lucide-react";
+  Loader2, Smartphone, Monitor,
+  Wallet, ChevronRight} from "lucide-react";
 import albedo from "@albedo-link/intent";
 import {
   isConnected,
@@ -13,13 +12,11 @@ import {
   getAddress,
   signMessage,
 } from "@stellar/freighter-api";
-import { setSessionCookie } from "@/app/actions/auth-session";
 type WalletOption = "freighter" | "albedo";
 
 import { useAlert } from "@/components/ui/AlertProvider";
 
 export function AuthPageClient() {
-  const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
   const [activeWallet, setActiveWallet] = useState<WalletOption | null>(null);
