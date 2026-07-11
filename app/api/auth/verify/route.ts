@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Keypair } from '@stellar/stellar-sdk';
 import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
 import { redis } from '@/lib/redis/client';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
@@ -138,7 +137,14 @@ export async function POST(req: Request) {
       { expiresIn: '7d' }
     );
 
-    (await cookies()).set({
+    // ── Issue Session Cookie on the Response ──────────────────────────────────
+    // IMPORTANT: Set the cookie directly on the response object, NOT via
+    // (await cookies()).set(). The latter modifies Next.js's internal store
+    // but does NOT guarantee the Set-Cookie header appears on the actual HTTP
+    // response when returning a custom NextResponse — especially on Vercel.
+    const response = NextResponse.json({ success: true, wallet: walletAddress });
+
+    response.cookies.set({
       name: 'Kredex_session',
       value: token,
       httpOnly: true,
@@ -148,7 +154,7 @@ export async function POST(req: Request) {
       maxAge: 7 * 24 * 60 * 60,
     });
 
-    return NextResponse.json({ success: true, wallet: walletAddress });
+    return response;
 
   } catch (error) {
     console.error('Verify error:', error);

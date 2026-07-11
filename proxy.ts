@@ -83,6 +83,7 @@ export async function proxy(request: NextRequest) {
   const isAuthEntryPath = pathname === "/auth";
 
   if (isDashboardPath && !effectiveUser) {
+    console.error(`[proxy] BLOCKING ${pathname} — hasSession=${hasSession} cookie=${!!sessionCookie?.value}`);
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/auth";
     redirectUrl.search = "";
