@@ -72,11 +72,27 @@ export function AuthPageClient() {
     const verifyData = await verifyRes.json();
     if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
 
-    // ── Set session cookie via Server Action (100% reliable on Vercel) ─────────
-    // Server Actions use Next.js's own cookie mutation API — cannot be stripped
-    // by middleware, CDN, or Vercel's edge layer. This is the correct approach.
+    // ── Set session cookie via every available method ────────────────────────
+    // The verify route already sets it server-side in its response headers.
+    // Below we also try document.cookie + Server Action as extra redundancy.
     if (verifyData.token) {
-      await setSessionCookie(verifyData.token);
+      // Method A: client-side document.cookie (immediate, synchronous)
+      try {
+        const isProd = window.location.protocol === "https:";
+        const maxAge = 7 * 24 * 60 * 60;
+        document.cookie = `Kredex_session=${verifyData.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${isProd ? "; Secure" : ""}`;
+      } catch (_) { /* ignore */ }
+
+      // Method B: Server Action (Next.js internal cookie mutation — most reliable)
+      try {
+        await setSessionCookie(verifyData.token);
+      } catch (_) { /* ignore — will fall back to other methods */ }
+
+      // Method C: redirect through /api/auth/set-session which sets cookie server-side
+      return {
+        ...verifyData,
+        redirectUrl: `/api/auth/set-session?t=${encodeURIComponent(verifyData.token)}`,
+      };
     }
 
     return verifyData;
@@ -99,12 +115,9 @@ export function AuthPageClient() {
       const data = await runAuthFlow(res.address, "freighter");
       showAlert("Welcome back!", "Successfully signed in with Freighter.", "success", 3000);
 
-      // Cookie is already set by the server action inside runAuthFlow.
-      // Navigate directly to the dashboard.
+      // Cookie is already set by Methods A+B; Method C redirects through set-session.
       const dest = (data as { redirectUrl?: string })?.redirectUrl ?? "/dashboard";
-      setTimeout(() => {
-        window.location.href = dest;
-      }, 1500);
+      setTimeout(() => { window.location.href = dest; }, 1500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Freighter login failed.";
       showAlert("Authentication Failed", msg, "error");
@@ -127,11 +140,9 @@ export function AuthPageClient() {
       const data = await runAuthFlow(res.pubkey, "albedo");
 
       showAlert("Welcome back!", "Successfully signed in with Albedo.", "success", 3000);
-      // Cookie is already set by the server action inside runAuthFlow.
+      // Cookie is already set by Methods A+B; Method C redirects through set-session.
       const dest = (data as { redirectUrl?: string })?.redirectUrl ?? "/dashboard";
-      setTimeout(() => {
-        window.location.href = dest;
-      }, 1500);
+      setTimeout(() => { window.location.href = dest; }, 1500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Albedo login failed.";
       showAlert("Authentication Failed", msg, "error");

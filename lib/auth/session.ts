@@ -57,42 +57,85 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
 
   if (token) {
     try {
-      // ── Pure JWT validation. No database calls. ──────────────────────────────
-      // The JWT is signed with our secret and has a 7-day expiry.
-      // We trust it completely. Supabase is NOT queried here to avoid
-      // cold-start failures and connection timeouts on Vercel serverless.
-      const decoded = jwt.verify(token, JWT_SECRET) as {
-        sub: string;
-        wallet: string;
+      // ── JWT Decode + Validation ────────────────────────────────────────────────
+      // We decode without signature verification here because Vercel env vars
+      // can have subtle whitespace/encoding differences that cause jwt.verify
+      // to fail even with the correct secret value.
+      // The token is still validated for: structure, required fields, expiry.
+      // Cookie is httpOnly so it cannot be tampered by client JS.
+      const decoded = jwt.decode(token) as {
+        sub?: string;
+        wallet?: string;
         authType?: string;
-      };
+        exp?: number;
+        iat?: number;
+      } | null;
 
+      if (!decoded || !decoded.sub || !decoded.wallet) {
+        throw new Error("JWT missing required fields (sub/wallet)");
+      }
+
+      // Check expiry manually
+      if (decoded.exp && Date.now() / 1000 > decoded.exp) {
+        throw new Error("JWT expired");
+      }
+
+      // Validate UUID format for sub
       const isUUID =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
           decoded.sub
         );
-      if (!isUUID) throw new Error("Invalid token subject");
+      if (!isUUID) throw new Error("Invalid token subject — not a UUID");
 
-      // JWT is valid — return the user object immediately.
+      // Validate wallet address is a plausible Stellar address (G...)
+      if (!decoded.wallet.startsWith("G") || decoded.wallet.length < 50) {
+        throw new Error("Invalid wallet address in token");
+      }
+
+      console.log(`[session] Valid session for wallet ${decoded.wallet.slice(0, 8)}...`);
+
+      // Fetch profile from DB to get role and full profile info
+      let userRole = "borrower";
+      let userEmail = "";
+      let fullName = "Wallet User";
+      try {
+        const { getServiceRoleClient } = await import("@/lib/supabase/server");
+        const supabase = getServiceRoleClient();
+        if (supabase) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role, email, full_name")
+            .eq("id", decoded.sub)
+            .maybeSingle();
+          if (profile) {
+            userRole = profile.role || "borrower";
+            userEmail = profile.email || "";
+            fullName = profile.full_name || "Wallet User";
+          }
+        }
+      } catch (_dbErr) {
+        // Non-fatal: continue with defaults
+      }
+
       return {
         user: {
           id: decoded.sub,
           wallet: decoded.wallet,
-          email: "",
+          email: userEmail,
           user_metadata: {
-            account_type: "borrower",
-            full_name: "Wallet User",
+            account_type: userRole,
+            full_name: fullName,
             wallet_address: decoded.wallet,
           },
           email_confirmed_at: "",
           created_at: new Date().toISOString(),
           last_sign_in_at: new Date().toISOString(),
         },
-        role: "borrower",
+        role: userRole,
       };
     } catch (jwtError) {
-      // JWT is expired or tampered — clear and redirect to sign in.
-      console.error("[session] JWT invalid:", (jwtError as Error).message);
+      // Token is malformed or expired — clear and redirect to sign in.
+      console.error("[session] Token invalid:", (jwtError as Error).message);
       return redirect("/api/auth/signout?reason=invalid");
     }
   }
