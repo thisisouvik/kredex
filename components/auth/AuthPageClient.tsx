@@ -72,23 +72,23 @@ export function AuthPageClient() {
     const verifyData = await verifyRes.json();
     if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
 
-    // ── Set session cookie via every available method ────────────────────────
-    // The verify route already sets it server-side in its response headers.
-    // Below we also try document.cookie + Server Action as extra redundancy.
+    // ── Set session cookie ────────────────────────────────────────────────────
+    // Method 1: verify route already set it via Set-Cookie response header.
+    // Method A: document.cookie as immediate client-side backup.
+    // Method C: redirect through /api/auth/set-session (server sets httpOnly cookie).
+    //
+    // NOTE: Server Action (Method B) was REMOVED — it caused the proxy to
+    // intercept the POST /auth server action call and redirect it to /dashboard,
+    // breaking the entire auth flow.
     if (verifyData.token) {
-      // Method A: client-side document.cookie (immediate, synchronous)
+      // Method A: client-side cookie (immediate)
       try {
         const isProd = window.location.protocol === "https:";
         const maxAge = 7 * 24 * 60 * 60;
         document.cookie = `Kredex_session=${verifyData.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${isProd ? "; Secure" : ""}`;
       } catch (_) { /* ignore */ }
 
-      // Method B: Server Action (Next.js internal cookie mutation — most reliable)
-      try {
-        await setSessionCookie(verifyData.token);
-      } catch (_) { /* ignore — will fall back to other methods */ }
-
-      // Method C: redirect through /api/auth/set-session which sets cookie server-side
+      // Method C: redirect through server route (guarantees httpOnly cookie)
       return {
         ...verifyData,
         redirectUrl: `/api/auth/set-session?t=${encodeURIComponent(verifyData.token)}`,

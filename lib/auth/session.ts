@@ -57,12 +57,6 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
 
   if (token) {
     try {
-      // ── JWT Decode + Validation ────────────────────────────────────────────────
-      // We decode without signature verification here because Vercel env vars
-      // can have subtle whitespace/encoding differences that cause jwt.verify
-      // to fail even with the correct secret value.
-      // The token is still validated for: structure, required fields, expiry.
-      // Cookie is httpOnly so it cannot be tampered by client JS.
       const decoded = jwt.decode(token) as {
         sub?: string;
         wallet?: string;
@@ -71,30 +65,41 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         iat?: number;
       } | null;
 
+      // Log full decode result for Vercel debugging
+      console.log("[session] Decoded token:", JSON.stringify({
+        hasDecoded: !!decoded,
+        sub: decoded?.sub?.slice(0, 8),
+        wallet: decoded?.wallet?.slice(0, 8),
+        exp: decoded?.exp,
+        now: Math.floor(Date.now() / 1000),
+        expired: decoded?.exp ? Date.now() / 1000 > decoded.exp : null,
+      }));
+
       if (!decoded || !decoded.sub || !decoded.wallet) {
-        throw new Error("JWT missing required fields (sub/wallet)");
+        console.error("[session] REJECTED: missing sub or wallet in decoded token");
+        return redirect("/auth");
       }
 
-      // Check expiry manually
       if (decoded.exp && Date.now() / 1000 > decoded.exp) {
-        throw new Error("JWT expired");
+        console.error("[session] REJECTED: token expired at", decoded.exp);
+        return redirect("/auth");
       }
 
-      // Validate UUID format for sub
       const isUUID =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          decoded.sub
-        );
-      if (!isUUID) throw new Error("Invalid token subject — not a UUID");
-
-      // Validate wallet address is a plausible Stellar address (G...)
-      if (!decoded.wallet.startsWith("G") || decoded.wallet.length < 50) {
-        throw new Error("Invalid wallet address in token");
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded.sub);
+      if (!isUUID) {
+        console.error("[session] REJECTED: sub is not a UUID:", decoded.sub);
+        return redirect("/auth");
       }
 
-      console.log(`[session] Valid session for wallet ${decoded.wallet.slice(0, 8)}...`);
+      if (!decoded.wallet.startsWith("G") || decoded.wallet.length < 50) {
+        console.error("[session] REJECTED: invalid wallet address:", decoded.wallet);
+        return redirect("/auth");
+      }
 
-      // Fetch profile from DB to get role and full profile info
+      console.log(`[session] ACCEPTED: wallet=${decoded.wallet.slice(0, 8)}... uuid=${decoded.sub.slice(0, 8)}...`);
+
+      // Fetch role from DB
       let userRole = "borrower";
       let userEmail = "";
       let fullName = "Wallet User";
@@ -111,10 +116,13 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
             userRole = profile.role || "borrower";
             userEmail = profile.email || "";
             fullName = profile.full_name || "Wallet User";
+            console.log(`[session] Profile found: role=${userRole}`);
+          } else {
+            console.log("[session] No profile in DB, using defaults");
           }
         }
-      } catch (_dbErr) {
-        // Non-fatal: continue with defaults
+      } catch (dbErr) {
+        console.error("[session] DB fetch failed (non-fatal):", dbErr);
       }
 
       return {
@@ -134,9 +142,8 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         role: userRole,
       };
     } catch (jwtError) {
-      // Token is malformed or expired — clear and redirect to sign in.
-      console.error("[session] Token invalid:", (jwtError as Error).message);
-      return redirect("/api/auth/signout?reason=invalid");
+      console.error("[session] REJECTED: unexpected error:", (jwtError as Error).message);
+      return redirect("/auth");
     }
   }
 
