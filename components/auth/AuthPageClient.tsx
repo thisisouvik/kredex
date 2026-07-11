@@ -71,12 +71,11 @@ export function AuthPageClient() {
     const verifyData = await verifyRes.json();
     if (!verifyRes.ok) throw new Error(verifyData.error || "Verification failed");
 
-    // 4. Manually store the session cookie client-side
-    // This bypasses the Vercel strict middleware layer stripping server Set-Cookie headers
+    // 4. Let the server set the session cookie via a redirect.
+    // We redirect through /api/auth/set-session which sets a proper
+    // httpOnly cookie server-side — reliable on Vercel, no edge stripping.
     if (verifyData.token) {
-      const isProd = window.location.protocol === "https:";
-      const maxAge = 7 * 24 * 60 * 60; // 7 days
-      document.cookie = `Kredex_session=${verifyData.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${isProd ? "; Secure" : ""}`;
+      return { ...verifyData, redirectUrl: `/api/auth/set-session?t=${encodeURIComponent(verifyData.token)}` };
     }
 
     return verifyData;
@@ -96,12 +95,14 @@ export function AuthPageClient() {
       const res = await getAddress();
       if (res.error) throw new Error(res.error);
 
-      await runAuthFlow(res.address, "freighter");
+      const data = await runAuthFlow(res.address, "freighter");
       showAlert("Welcome back!", "Successfully signed in with Freighter.", "success", 3000);
-      
-      // Delay redirect slightly so the user sees the welcome alert
+
+      // Redirect through server-side cookie setter so the session cookie is set
+      // as a proper httpOnly cookie, not via document.cookie.
+      const dest = data?.redirectUrl ?? "/dashboard";
       setTimeout(() => {
-        window.location.href = "/dashboard";
+        window.location.href = dest;
       }, 1500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Freighter login failed.";
@@ -120,13 +121,14 @@ export function AuthPageClient() {
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Request is taking a long time. Please retry after some time.")), 15000)
       );
-      
+
       const res = await Promise.race([albedo.publicKey({}), timeoutPromise]);
-      await runAuthFlow(res.pubkey, "albedo");
-      
+      const data = await runAuthFlow(res.pubkey, "albedo");
+
       showAlert("Welcome back!", "Successfully signed in with Albedo.", "success", 3000);
+      const dest = data?.redirectUrl ?? "/dashboard";
       setTimeout(() => {
-        window.location.href = "/dashboard";
+        window.location.href = dest;
       }, 1500);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Albedo login failed.";

@@ -90,12 +90,10 @@ export async function proxy(request: NextRequest) {
   const isAuthEntryPath = pathname === "/auth";
 
   if (isDashboardPath && !effectiveUser) {
-    console.error(`[proxy] AUTH BYPASSED FOR TESTING ${pathname}`);
-    // TEMPORARY BYPASS: Do not redirect to auth
-    // const redirectUrl = request.nextUrl.clone();
-    // redirectUrl.pathname = "/auth";
-    // redirectUrl.search = "";
-    // return NextResponse.redirect(redirectUrl);
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/auth";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
   }
 
   if (isAuthEntryPath && effectiveUser) {
