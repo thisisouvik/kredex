@@ -275,15 +275,15 @@ export async function requireTradeVaultAdmin() {
   const session = await requireAuthenticatedUser();
   const ADMIN_WALLET = process.env.ADMIN_WALLET_ADDRESS;
 
+  // Security check: Only allow the specific admin wallet address
   if (!ADMIN_WALLET) {
-    // No admin wallet configured — allow access in testing bypass mode
-    console.warn('[admin] ADMIN_WALLET_ADDRESS not set — bypassing admin check for testing');
-    return session;
+    console.error('[admin] ADMIN_WALLET_ADDRESS env var is not set. Admin access blocked.');
+    redirect("/dashboard");
   }
 
-  // Security check: Only allow the specific admin wallet address
   if (session.user.wallet !== ADMIN_WALLET) {
-    redirect("/dashboard/borrower");
+    // Not the admin wallet — redirect silently
+    redirect("/dashboard");
   }
 
   return session;
