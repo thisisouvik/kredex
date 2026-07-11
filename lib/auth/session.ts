@@ -60,6 +60,7 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
       const decoded = jwt.decode(token) as {
         sub?: string;
         wallet?: string;
+        role?: string;
         authType?: string;
         exp?: number;
         iat?: number;
@@ -99,8 +100,8 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
 
       console.log(`[session] ACCEPTED: wallet=${decoded.wallet.slice(0, 8)}... uuid=${decoded.sub.slice(0, 8)}...`);
 
-      // Fetch role from DB
-      let userRole = "borrower";
+      // Fetch role from DB — JWT role is used as fallback if DB is slow/unavailable
+      let userRole = decoded.role || "borrower";
       let userEmail = "";
       let fullName = "Wallet User";
       try {
@@ -113,12 +114,12 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
             .eq("id", decoded.sub)
             .maybeSingle();
           if (profile) {
-            userRole = profile.role || "borrower";
+            userRole = profile.role || decoded.role || "borrower";
             userEmail = profile.email || "";
             fullName = profile.full_name || "Wallet User";
             console.log(`[session] Profile found: role=${userRole}`);
           } else {
-            console.log("[session] No profile in DB, using defaults");
+            console.log("[session] No profile in DB, using JWT role:", userRole);
           }
         }
       } catch (dbErr) {

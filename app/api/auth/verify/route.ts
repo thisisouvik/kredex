@@ -89,6 +89,7 @@ export async function POST(req: Request) {
 
     // ── Upsert Profile and Wallet Profile in DB ────────────────────────────────
     let userUuid = null; 
+    let userRole = 'borrower';
     try {
       const { randomUUID } = await import('crypto');
       const { getServiceRoleClient } = await import('@/lib/supabase/server');
@@ -110,19 +111,40 @@ export async function POST(req: Request) {
       if (wpData) {
         userUuid = wpData.id;
       } else {
-        // Generate new UUID for wallet profile
         userUuid = randomUUID();
       }
       
-      // Sync wallet_profiles
+      // 2. Sync wallet_profiles
       const { error: syncError } = await supabase
         .from('wallet_profiles')
-        .upsert({
-          id: userUuid,
-          wallet_address: walletAddress
-        });
-        
+        .upsert({ id: userUuid, wallet_address: walletAddress });
       if (syncError) throw syncError;
+
+      // 3. Check if profile exists and get role
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', userUuid)
+        .maybeSingle();
+
+      if (existingProfile) {
+        userRole = existingProfile.role || 'borrower';
+      } else {
+        // 4. Create profile for first-time users
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: userUuid,
+            wallet_address: walletAddress,
+            role: 'borrower',
+            full_name: `Wallet User ${walletAddress.slice(0, 6)}`,
+            created_at: new Date().toISOString(),
+          });
+        if (profileError) {
+          // Non-fatal — profile can be created later on dashboard
+          console.error('Profile upsert failed (non-fatal):', profileError.message);
+        }
+      }
 
     } catch (dbErr) {
       console.error('CRITICAL DB profile upsert failed:', dbErr);
@@ -130,9 +152,8 @@ export async function POST(req: Request) {
     }
 
     // ── Issue JWT Session ─────────────────────────────────────────────────────
-    // Use the true UUID as the subject, keeping wallet address for convenience
     const token = jwt.sign(
-      { sub: userUuid, wallet: walletAddress, authType: authType ?? 'stellar' },
+      { sub: userUuid, wallet: walletAddress, role: userRole, authType: authType ?? 'stellar' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
