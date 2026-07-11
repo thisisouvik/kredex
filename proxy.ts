@@ -66,7 +66,14 @@ export async function proxy(request: NextRequest) {
     try {
       const parts = sessionCookie.value.split('.');
       if (parts.length === 3) {
-        const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
+        // Vercel Edge Runtime does not support Node.js Buffer. Use standard Web API atob.
+        // JWT uses base64url, so we must convert to standard base64 first.
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        // Pad with '=' if necessary
+        const padLength = (4 - (base64.length % 4)) % 4;
+        const paddedBase64 = base64 + '='.repeat(padLength);
+        
+        const payloadStr = atob(paddedBase64);
         const payload = JSON.parse(payloadStr);
         if (payload.sub && isValidUuid(payload.sub)) {
           hasSession = true;
