@@ -57,74 +57,42 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
 
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; wallet: string };
-      
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded.sub);
-      if (!isUUID) throw new Error("Legacy token");
+      // ── Pure JWT validation. No database calls. ──────────────────────────────
+      // The JWT is signed with our secret and has a 7-day expiry.
+      // We trust it completely. Supabase is NOT queried here to avoid
+      // cold-start failures and connection timeouts on Vercel serverless.
+      const decoded = jwt.verify(token, JWT_SECRET) as {
+        sub: string;
+        wallet: string;
+        authType?: string;
+      };
 
-      // ── JWT is cryptographically valid. Trust it. ────────────────────────────
-      // We only do a DB check as a best-effort to enrich the user object.
-      // If DB is unreachable we still let the user through — the JWT itself
-      // is the source of truth (signed with our secret, 7-day expiry).
-      let dbEmail = "";
-      let dbEmailConfirmedAt = "";
-      try {
-        const { getServiceRoleClient } = await import('@/lib/supabase/server');
-        const srClient = getServiceRoleClient();
-        if (srClient) {
-          // Check wallet_profiles exists for this user
-          const { data: wpData } = await srClient
-            .from('wallet_profiles')
-            .select('id')
-            .eq('id', decoded.sub)
-            .maybeSingle();
+      const isUUID =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          decoded.sub
+        );
+      if (!isUUID) throw new Error("Invalid token subject");
 
-          // If wallet profile is missing AND we can connect to DB, the cookie is stale
-          // (e.g. DB was wiped). In that case, re-upsert rather than killing the session.
-          if (!wpData) {
-            // Re-upsert the wallet profile using data from the JWT
-            await srClient.from('wallet_profiles').upsert({
-              id: decoded.sub,
-              wallet_address: decoded.wallet,
-            });
-          }
-          
-          // Optionally fetch email from profiles if linked
-          const { data: pData } = await srClient
-            .from('profiles')
-            .select('email, email_confirmed_at')
-            .eq('id', decoded.sub)
-            .maybeSingle();
-          if (pData) {
-            dbEmail = pData.email || "";
-            dbEmailConfirmedAt = pData.email_confirmed_at || "";
-          }
-        }
-      } catch (dbErr) {
-        // DB is unreachable — log but DO NOT invalidate the session.
-        // The JWT is still cryptographically valid.
-        console.warn("[session] DB check failed (non-fatal), continuing with JWT-only session:", (dbErr as Error).message);
-      }
-
+      // JWT is valid — return the user object immediately.
       return {
         user: {
           id: decoded.sub,
           wallet: decoded.wallet,
-          email: dbEmail,
-          user_metadata: { 
-            account_type: 'borrower',
-            full_name: 'Wallet User',
-            wallet_address: decoded.wallet
+          email: "",
+          user_metadata: {
+            account_type: "borrower",
+            full_name: "Wallet User",
+            wallet_address: decoded.wallet,
           },
-          email_confirmed_at: dbEmailConfirmedAt,
+          email_confirmed_at: "",
           created_at: new Date().toISOString(),
           last_sign_in_at: new Date().toISOString(),
         },
-        role: 'borrower'
+        role: "borrower",
       };
-    } catch (error) {
-      // Only redirect to signout if the JWT itself is invalid/expired
-      console.warn("[session] JWT verification failed, clearing session:", (error as Error).message);
+    } catch (jwtError) {
+      // JWT is expired or tampered — clear and redirect to sign in.
+      console.error("[session] JWT invalid:", (jwtError as Error).message);
       return redirect("/api/auth/signout?reason=invalid");
     }
   }
