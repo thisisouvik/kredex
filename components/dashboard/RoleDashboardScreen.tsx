@@ -3,14 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getBrowserSupabaseClient } from "@/lib/supabase/client";
 import { useAlert } from "@/components/ui/AlertProvider";
-import {
-  getDashboardPath,
-  isUserRole,
-  normalizeUserRole,
-  type UserRole,
-} from "@/lib/auth/roles";
+import { type UserRole } from "@/lib/auth/roles";
 
 interface RoleMetric {
   label: string;
@@ -40,75 +34,59 @@ export function RoleDashboardScreen({
 }: RoleDashboardScreenProps) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
-  const [email, setEmail] = useState<string | null>(null);
+  const [walletDisplay, setWalletDisplay] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { showAlert } = useAlert();
 
   useEffect(() => {
     let cancelled = false;
 
     const ensureRoleAccess = async () => {
-      const supabase = getBrowserSupabaseClient();
-      if (!supabase) {
-        if (!cancelled) {
-          setError("Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment.");
-        }
-        return;
-      }
+      // Use our JWT-based /api/auth/me instead of supabase.auth.getSession().
+      // Wallet login does NOT create a Supabase Auth session — getSession()
+      // always returned null and was causing incorrect redirects to signout.
+      try {
+        const res = await fetch("/api/auth/me");
 
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
-
-      if (!session) {
-        router.replace("/");
-        return;
-      }
-
-      const metadataRole = session.user.user_metadata?.account_type;
-      const roleFromUser = normalizeUserRole(metadataRole);
-
-      if (isUserRole(metadataRole) && roleFromUser !== expectedRole) {
-        router.replace(getDashboardPath(roleFromUser));
-        return;
-      }
-
-      if (!isUserRole(metadataRole)) {
-        const { error: updateError } = await supabase.auth.updateUser({
-          data: {
-            ...session.user.user_metadata,
-            account_type: expectedRole,
-          },
-        });
-
-        if (updateError) {
-          if (!cancelled) {
-            setError(updateError.message);
-          }
+        if (!res.ok) {
+          if (!cancelled) router.replace("/auth");
           return;
         }
-      }
 
-      if (!cancelled) {
-        setEmail(session.user.email ?? null);
-        setReady(true);
+        const data = await res.json() as {
+          authenticated: boolean;
+          user?: { id: string; wallet: string; role: string };
+        };
+
+        if (!data.authenticated || !data.user) {
+          if (!cancelled) router.replace("/auth");
+          return;
+        }
+
+        // If the user's actual role differs from this dashboard's expected role,
+        // redirect them to their correct dashboard instead of showing an error.
+        if (data.user.role && data.user.role !== expectedRole) {
+          if (!cancelled) router.replace(`/dashboard/${data.user.role}`);
+          return;
+        }
+
+        if (!cancelled) {
+          // Show abbreviated wallet address as identity indicator
+          const w = data.user.wallet;
+          setWalletDisplay(w ? `${w.slice(0, 6)}…${w.slice(-4)}` : null);
+          setReady(true);
+        }
+      } catch {
+        // Network error — server already validated auth server-side, so allow render
+        if (!cancelled) setReady(true);
       }
     };
 
     void ensureRoleAccess();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [expectedRole, router]);
 
-  const { showAlert } = useAlert();
-
   const handleSignOut = async () => {
-    const supabase = getBrowserSupabaseClient();
-    if (!supabase) {
-      return;
-    }
-
-    await supabase.auth.signOut();
     showAlert("Farewell!", "Successfully signed out. See you next time.", "success", 3000);
     setTimeout(() => {
       window.location.href = "/api/auth/signout";
@@ -145,7 +123,7 @@ export function RoleDashboardScreen({
           </button>
         </div>
 
-        <p className="role-email">Signed in as: {email ?? "Unknown"}</p>
+        <p className="role-email">Signed in as: {walletDisplay ?? "Wallet User"}</p>
 
         <div className="role-metrics">
           {metrics.map((item) => (
