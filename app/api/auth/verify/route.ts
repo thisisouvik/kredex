@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { Keypair } from '@stellar/stellar-sdk';
 import jwt from 'jsonwebtoken';
 import { redis } from '@/lib/redis/client';
+import prisma from '@/lib/prisma';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) throw new Error("JWT_SECRET environment variable is missing. Check your .env file.");
@@ -87,67 +88,39 @@ export async function POST(req: Request) {
     // ── Delete challenge (single-use) ─────────────────────────────────────────
     await redis.del(key);
 
-    // ── Upsert Profile and Wallet Profile in DB ────────────────────────────────
-    let userUuid = null; 
+    // ── Upsert User in NeonDB via Prisma ───────────────────────────────────
+    let userUuid: string;
     let userRole = 'borrower';
     try {
-      const { randomUUID } = await import('crypto');
-      const { getServiceRoleClient } = await import('@/lib/supabase/server');
-      const supabase = getServiceRoleClient();
-      
-      if (!supabase) {
-        throw new Error("Supabase client is unavailable");
-      }
-      
-      // 1. Check if user already exists in wallet_profiles
-      const { data: wpData, error: wpError } = await supabase
-        .from('wallet_profiles')
-        .select('id')
-        .eq('wallet_address', walletAddress)
-        .maybeSingle();
-        
-      if (wpError) throw wpError;
-      
-      if (wpData) {
-        userUuid = wpData.id;
-      } else {
-        userUuid = randomUUID();
-      }
-      
-      // 2. Sync wallet_profiles
-      const { error: syncError } = await supabase
-        .from('wallet_profiles')
-        .upsert({ id: userUuid, wallet_address: walletAddress });
-      if (syncError) throw syncError;
+      const existing = await prisma.user.findUnique({
+        where: { walletAddress },
+        select: { id: true, role: true },
+      });
 
-      // 3. Check if profile exists and get role
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id, role')
-        .eq('id', userUuid)
-        .maybeSingle();
-
-      if (existingProfile) {
-        userRole = existingProfile.role || 'borrower';
+      if (existing) {
+        userUuid = existing.id;
+        userRole = existing.role;
       } else {
-        // 4. Create profile for first-time users
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: userUuid,
-            wallet_address: walletAddress,
+        // First login — create a new user record
+        const created = await prisma.user.create({
+          data: {
+            walletAddress,
             role: 'borrower',
-            full_name: `Wallet User ${walletAddress.slice(0, 6)}`,
-            created_at: new Date().toISOString(),
-          });
-        if (profileError) {
-          // Non-fatal — profile can be created later on dashboard
-          console.error('Profile upsert failed (non-fatal):', profileError.message);
-        }
+            fullName: `Wallet User ${walletAddress.slice(0, 6)}`,
+          },
+          select: { id: true, role: true },
+        });
+        userUuid = created.id;
+        userRole = created.role;
       }
 
+      // Touch updatedAt on every login
+      await prisma.user.update({
+        where: { id: userUuid },
+        data: { updatedAt: new Date() },
+      });
     } catch (dbErr) {
-      console.error('CRITICAL DB profile upsert failed:', dbErr);
+      console.error('CRITICAL: Prisma user upsert failed:', dbErr);
       return NextResponse.json({ error: 'Database connection failed. Please try again.' }, { status: 500 });
     }
 

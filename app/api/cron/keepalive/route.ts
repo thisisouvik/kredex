@@ -12,16 +12,10 @@ export async function GET(req: Request) {
     }
 
     // 1. Keep Database Active (Simple query)
-    const activeWallets = await prisma.walletProfile.count();
+    const activeWallets = await prisma.user.count();
 
-    // 2. Clean up expired challenges
-    const deleteResult = await prisma.authChallenge.deleteMany({
-      where: {
-        expiresAt: {
-          lt: new Date(),
-        },
-      },
-    });
+    // 2. Auth challenges are now in Redis so we don't need to delete them here
+    const deleteResult = { count: 0 };
 
     return NextResponse.json({
       success: true,

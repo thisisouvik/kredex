@@ -1,9 +1,11 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import jwt from "jsonwebtoken";
+import prisma from "@/lib/prisma";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) throw new Error("JWT_SECRET environment variable is missing. Check your .env file.");
+
 export async function requireAuthenticatedUser(expectedRole?: string) {
   // Check dev auth bypass first
   const DEV_BYPASS_ENABLED =
@@ -21,14 +23,12 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         redirect("/auth");
       }
       
-      // Upsert dev profile to avoid foreign key errors (e.g. loans_borrower_id_fkey)
       try {
-        const { getServiceRoleClient } = await import('@/lib/supabase/server');
-        const srClient = getServiceRoleClient();
-        if (srClient) {
-          await srClient.from('profiles').upsert({ id: bypassUserId, wallet_address: "GBYPASSADDRESS0000000000000000000000000000000000000000000", role: bypassRole, full_name: `Dev Bypass ${bypassRole}` });
-          await srClient.from('wallet_profiles').upsert({ id: bypassUserId, wallet_address: "GBYPASSADDRESS0000000000000000000000000000000000000000000" });
-        }
+        await prisma.user.upsert({
+          where: { id: bypassUserId },
+          create: { id: bypassUserId, walletAddress: "GBYPASSADDRESS0000000000000000000000000000000000000000000", role: bypassRole, fullName: `Dev Bypass ${bypassRole}` },
+          update: { role: bypassRole }
+        });
       } catch (e) {
         // Ignore errors, might be read-only or offline
       }
@@ -66,16 +66,6 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         iat?: number;
       } | null;
 
-      // Log full decode result for Vercel debugging
-      console.log("[session] Decoded token:", JSON.stringify({
-        hasDecoded: !!decoded,
-        sub: decoded?.sub?.slice(0, 8),
-        wallet: decoded?.wallet?.slice(0, 8),
-        exp: decoded?.exp,
-        now: Math.floor(Date.now() / 1000),
-        expired: decoded?.exp ? Date.now() / 1000 > decoded.exp : null,
-      }));
-
       if (!decoded || !decoded.sub || !decoded.wallet) {
         console.error("[session] REJECTED: missing sub or wallet in decoded token");
         return redirect("/auth");
@@ -86,8 +76,7 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         return redirect("/auth");
       }
 
-      const isUUID =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded.sub);
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded.sub);
       if (!isUUID) {
         console.error("[session] REJECTED: sub is not a UUID:", decoded.sub);
         return redirect("/auth");
@@ -98,29 +87,19 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
         return redirect("/auth");
       }
 
-      console.log(`[session] ACCEPTED: wallet=${decoded.wallet.slice(0, 8)}... uuid=${decoded.sub.slice(0, 8)}...`);
-
-      // Fetch role from DB — JWT role is used as fallback if DB is slow/unavailable
+      // Fetch role from NeonDB via Prisma
       let userRole = decoded.role || "borrower";
       let userEmail = "";
       let fullName = "Wallet User";
       try {
-        const { getServiceRoleClient } = await import("@/lib/supabase/server");
-        const supabase = getServiceRoleClient();
-        if (supabase) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("role, email, full_name")
-            .eq("id", decoded.sub)
-            .maybeSingle();
-          if (profile) {
-            userRole = profile.role || decoded.role || "borrower";
-            userEmail = profile.email || "";
-            fullName = profile.full_name || "Wallet User";
-            console.log(`[session] Profile found: role=${userRole}`);
-          } else {
-            console.log("[session] No profile in DB, using JWT role:", userRole);
-          }
+        const profile = await prisma.user.findUnique({
+          where: { id: decoded.sub },
+          select: { role: true, email: true, fullName: true },
+        });
+        if (profile) {
+          userRole = profile.role || decoded.role || "borrower";
+          userEmail = profile.email ?? "";
+          fullName = profile.fullName ?? "Wallet User";
         }
       } catch (dbErr) {
         console.error("[session] DB fetch failed (non-fatal):", dbErr);
@@ -148,32 +127,6 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
     }
   }
 
-  // Fallback to Supabase Auth (for Google users)
-  try {
-    const { getServerSupabaseClient } = await import("@/lib/supabase/server");
-    const supabase = await getServerSupabaseClient();
-    if (supabase) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        // Find wallet linked to this user
-        const { data: profile } = await supabase.from('profiles').select('wallet_address, role').eq('id', user.id).maybeSingle();
-        if (!profile?.wallet_address) {
-           // User logged in via Google but hasn't linked a wallet yet!
-           redirect("/auth/link-wallet");
-        }
-        return {
-          user: {
-            ...user,
-            wallet: profile.wallet_address
-          },
-          role: profile.role || 'borrower'
-        };
-      }
-    }
-  } catch (err) {
-    // Ignore and redirect
-  }
-
   // No valid session found — redirect to sign in
   redirect("/auth");
 }
@@ -184,13 +137,11 @@ export async function getAuthenticatedUser() {
 
   if (token) {
     try {
-      // Use jwt.decode (not jwt.verify) — same as requireAuthenticatedUser.
-      // jwt.verify fails in Vercel when JWT_SECRET has encoding differences.
       const decoded = jwt.decode(token) as { sub?: string; wallet?: string; exp?: number } | null;
       if (decoded?.sub && decoded?.wallet) {
         // Check expiry
         if (decoded.exp && Date.now() / 1000 > decoded.exp) {
-          return null; // expired — don't crash, just return null
+          return null; // expired
         }
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded.sub);
         if (isUUID) {
@@ -198,27 +149,9 @@ export async function getAuthenticatedUser() {
         }
       }
     } catch {
-      // Malformed token — fall through to Supabase
+      // Malformed token
     }
   }
-
-  try {
-    const { getServerSupabaseClient } = await import("@/lib/supabase/server");
-    const supabase = await getServerSupabaseClient();
-    if (supabase) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase.from('profiles').select('wallet_address').eq('id', user.id).maybeSingle();
-        return {
-          user: {
-            id: user.id,
-            wallet: profile?.wallet_address || '',
-          }
-        };
-      }
-    }
-  } catch {}
-
   return null;
 }
 
@@ -226,14 +159,12 @@ export async function requireTradeVaultAdmin() {
   const session = await requireAuthenticatedUser();
   const ADMIN_WALLET = process.env.ADMIN_WALLET_ADDRESS;
 
-  // Security check: Only allow the specific admin wallet address
   if (!ADMIN_WALLET) {
     console.error('[admin] ADMIN_WALLET_ADDRESS env var is not set. Admin access blocked.');
     redirect("/dashboard");
   }
 
   if (session.user.wallet !== ADMIN_WALLET) {
-    // Not the admin wallet — redirect silently
     redirect("/dashboard");
   }
 

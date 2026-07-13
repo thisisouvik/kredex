@@ -1,5 +1,6 @@
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { withCache } from "@/lib/redis/cache";
+import { getBorrowerDashboardMetrics } from "@/lib/dashboard/metrics";
 
 export type MarketplaceLoanRow = {
   id: string;
@@ -14,47 +15,36 @@ export type MarketplaceLoanRow = {
 
 export async function getMarketplaceLoans(): Promise<MarketplaceLoanRow[]> {
   return withCache("marketplace:open_loans", 30, async () => {
-    const srClient = getServiceRoleClient();
-    if (!srClient) return [];
+    try {
+      const openLoans = await prisma.loan.findMany({
+        where: { status: { in: ["requested", "approved"] } },
+        orderBy: { createdAt: "asc" },
+        include: { borrower: true },
+      });
 
-    const openLoansRes = await srClient.rpc("get_marketplace_loans");
-    if (!openLoansRes.error) {
-      return (openLoansRes.data ?? []) as MarketplaceLoanRow[];
+      // Get reputation score via the metrics logic per user
+      const borrowerIds = Array.from(new Set(openLoans.map(l => l.borrowerId)));
+      const scoreMap = new Map<string, number>();
+      await Promise.all(
+        borrowerIds.map(async (bid) => {
+          const metrics = await getBorrowerDashboardMetrics(bid);
+          scoreMap.set(bid, metrics.reputationScore);
+        })
+      );
+
+      return openLoans.map(loan => ({
+        id: loan.id,
+        principal_amount: Number(loan.principalAmount),
+        apr_bps: Number(loan.aprBps),
+        duration_days: Number(loan.durationDays),
+        borrower_id: loan.borrowerId,
+        borrower_name: loan.borrower?.fullName ?? "Wallet User",
+        borrower_wallet: loan.borrower?.walletAddress ?? "",
+        trust_score: scoreMap.get(loan.borrowerId) ?? 250,
+      }));
+    } catch (err) {
+      console.error("Marketplace fetch error:", err);
+      return [];
     }
-
-    // Fallback path
-    const fallbackLoansRes = await srClient
-      .from("loans")
-      .select("id, principal_amount, apr_bps, duration_days, borrower_id")
-      .in("status", ["requested", "approved"])
-      .order("created_at", { ascending: true });
-
-    const fallbackLoans = fallbackLoansRes.data ?? [];
-    if (fallbackLoans.length === 0) return [];
-    
-    const borrowerIds = Array.from(new Set(fallbackLoans.map((l) => String(l.borrower_id))));
-
-    const [profilesRes, snapshotsRes] = await Promise.all([
-      srClient.from("profiles").select("id, full_name, wallet_address").in("id", borrowerIds),
-      srClient.from("reputation_snapshots").select("user_id, score").in("user_id", borrowerIds)
-    ]);
-
-    const profileMap = Object.fromEntries((profilesRes.data ?? []).map((p) => [String(p.id), p]));
-    const scoreMap = Object.fromEntries((snapshotsRes.data ?? []).map((s) => [String(s.user_id), Number(s.score)]));
-
-    return fallbackLoans.map((l) => {
-      const bid = String(l.borrower_id);
-      const prof = profileMap[bid];
-      return {
-        id: String(l.id),
-        principal_amount: Number(l.principal_amount),
-        apr_bps: Number(l.apr_bps),
-        duration_days: Number(l.duration_days),
-        borrower_id: bid,
-        borrower_name: prof?.full_name ? String(prof.full_name) : "Anonymous",
-        borrower_wallet: prof?.wallet_address ? String(prof.wallet_address) : "",
-        trust_score: scoreMap[bid] ?? 250,
-      };
-    });
   });
 }

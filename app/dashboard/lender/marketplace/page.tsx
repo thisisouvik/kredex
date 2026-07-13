@@ -2,47 +2,40 @@ import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { LoanMarketplace } from "@/components/dashboard/LoanMarketplace";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getLenderDashboardMetrics, presentLenderMetrics } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
 import { buildStellarTxVerificationUrl, isLikelyTxHash } from "@/lib/stellar/explorer";
 
 export default async function LenderMarketplacePage() {
   const { user } = await requireAuthenticatedUser("lender");
-  const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
+  const walletAddress = (user.user_metadata?.wallet_address as string | undefined) ?? null;
   const metrics = await getLenderDashboardMetrics(user.id);
 
-  const supabase  = getServiceRoleClient();
-  const srClient = getServiceRoleClient();
-
   // ── Own funded loan records (ledger) ─────────────────────────────────────
-  const fundedTxsRes = srClient
-    ? await srClient
-        .from("ledger_transactions")
-        .select("id, ref_id, amount, metadata, created_at")
-        .eq("user_id", user.id)
-        .eq("ref_type", "loan_fund")
-        .order("created_at", { ascending: false })
-        .limit(20)
-    : { data: [] };
+  const fundedTxs = await prisma.ledgerTransaction.findMany({
+    where: { userId: user.id, refType: "loan_fund" },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, refId: true, amount: true, metadata: true, createdAt: true },
+  }).catch(() => []);
 
   const { getMarketplaceLoans } = await import("@/lib/dashboard/marketplace");
   const openLoans = await getMarketplaceLoans();
 
-  const fundedTxs        = fundedTxsRes.data        ?? [];
   const marketplaceLoans = openLoans.map((l) => ({
-    id: String(l.id),
-    principal_amount: Number(l.principal_amount ?? 0),
-    apr_bps: Number(l.apr_bps ?? 0),
-    duration_days: Number(l.duration_days ?? 30),
-    trust_score: Number(l.trust_score ?? 250),
-    borrower_name: String(l.borrower_name ?? `Borrower ${String(l.borrower_id).slice(0, 6)}`),
-    borrower_wallet: String(l.borrower_wallet ?? ""),
+    id: l.id,
+    principal_amount: l.principal_amount,
+    apr_bps: l.apr_bps,
+    duration_days: l.duration_days,
+    trust_score: l.trust_score,
+    borrower_name: l.borrower_name,
+    borrower_wallet: l.borrower_wallet,
   }));
 
-  const profileRes = supabase
-    ? await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
-    : { data: null };
-  const profile = profileRes.data;
+  const profile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { fullName: true }
+  }).catch(() => null);
 
 
   return (
@@ -51,7 +44,7 @@ export default async function LenderMarketplacePage() {
       heading="Loan Marketplace"
       description="Browse open borrower requests. Fund directly via Freighter — XLM goes straight to the borrower's Stellar wallet. Full on-chain transparency."
       email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      userName={String(user.user_metadata?.full_name ?? profile?.fullName ?? "")}
       metrics={presentLenderMetrics(metrics)}
       currentPath="/dashboard/lender/marketplace"
       profilePath="/dashboard/lender/profile"
@@ -134,11 +127,11 @@ export default async function LenderMarketplacePage() {
                         return (
                           <tr key={String(tx.id)}>
                             <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>
-                              {String(tx.ref_id ?? "").slice(0, 8)}
+                              {String(tx.refId ?? "").slice(0, 8)}
                             </td>
                             <td><strong>{Number(tx.amount ?? 0).toFixed(2)} XLM</strong></td>
                             <td style={{ fontSize: "0.82rem", opacity: 0.7 }}>
-                              {tx.created_at ? new Date(String(tx.created_at)).toLocaleDateString() : "—"}
+                              {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : "—"}
                             </td>
                             <td>
                               {isLikelyTxHash(txHash) ? (

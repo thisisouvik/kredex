@@ -1,29 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
-/**
- * POST /api/loans/fund
- *
- * Direct P2P lending — a lender directly funds a specific open loan.
- *
- * Flow:
- *   1. Lender signs a Stellar payment to the BORROWER's wallet via Freighter (client-side)
- *   2. Client sends the confirmed txHash here
- *   3. We validate the loan is still "requested" (not funded by someone else)
- *   4. Update loan → status: "active", record lender info & txHash in ledger
- *
- * Body: { loanId, txHash, lenderAddress, lenderUserId? }
- */
 export async function POST(request: NextRequest) {
   try {
     const { user } = await requireAuthenticatedUser("lender");
-    const supabase = await getServerSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-    }
-
     const body = await request.json();
     const { loanId, txHash, lenderAddress } = body as {
       loanId: string;
@@ -42,12 +24,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Prevent duplicate recording of same tx ───────────────────────────────
-    const { data: existingTx } = await supabase
-      .from("ledger_transactions")
-      .select("id")
-      .eq("ref_type", "loan_fund")
-      .eq("ref_id", loanId)
-      .maybeSingle();
+    const existingTx = await prisma.ledgerTransaction.findFirst({
+      where: { refType: "loan_fund", refId: loanId }
+    });
 
     if (existingTx) {
       return NextResponse.json(
@@ -57,18 +36,16 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Fetch the loan ───────────────────────────────────────────────────────
-    const { data: loan, error: fetchErr } = await supabase
-      .from("loans")
-      .select("id, status, principal_amount, borrower_id, pool_id, apr_bps, duration_days")
-      .eq("id", loanId)
-      .maybeSingle();
+    const loan = await prisma.loan.findUnique({
+      where: { id: loanId }
+    });
 
-    if (fetchErr || !loan) {
+    if (!loan) {
       return NextResponse.json({ error: "Loan not found" }, { status: 404 });
     }
 
     const fundableStatuses = ["requested", "approved"];
-    if (!fundableStatuses.includes(String(loan.status))) {
+    if (!fundableStatuses.includes(loan.status)) {
       return NextResponse.json(
         { error: `Loan is not available for funding (status: ${loan.status})` },
         { status: 409 }
@@ -76,83 +53,73 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Prevent lender from funding their own loan ────────────────────────────
-    if (String(loan.borrower_id) === String(user.id)) {
+    if (loan.borrowerId === user.id) {
       return NextResponse.json(
         { error: "You cannot fund your own loan" },
         { status: 400 }
       );
     }
 
-    const now = new Date().toISOString();
-
-    // Calculate due date based on duration
+    const now = new Date();
     const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + Number(loan.duration_days ?? 30));
+    dueDate.setDate(dueDate.getDate() + loan.durationDays);
 
-    // ── Activate the loan ────────────────────────────────────────────────────
-    const { data: activatedLoan, error: updateErr } = await supabase.rpc("activate_loan_funding", {
-      p_loan_id: loanId,
-      p_lender_id: user.id,
-      p_approved_at: now,
-      p_due_at: dueDate.toISOString(),
-    });
+    // ── Activate the loan & Record in ledger ────────────────────────────────
+    await prisma.$transaction(async (tx) => {
+      // 1. Update Loan
+      await tx.loan.update({
+        where: { id: loanId },
+        data: {
+          status: "active",
+          lenderId: user.id,
+          dueAt: dueDate,
+        }
+      });
 
-    if (updateErr) {
-      if (String(updateErr.message || "").includes("Could not find the function public.activate_loan_funding")) {
-        return NextResponse.json(
-          {
-            error:
-              "Funding RPC is not installed in this database yet. Apply sql/009_hotfix_activate_loan_funding_rpc.sql in Supabase, then retry funding.",
-          },
-          { status: 500 }
-        );
-      }
-      return NextResponse.json({ error: updateErr.message }, { status: 500 });
-    }
-
-    // ── Record in ledger with full transparency info ──────────────────────────
-    await supabase.from("ledger_transactions").insert({
-      user_id: user.id, // the lender
-      category: "loan_fund",
-      amount: Number(loan.principal_amount ?? 0),
-      currency: "XLM",
-      status: "confirmed",
-      ref_type: "loan_fund",
-      ref_id: loanId,
-      metadata: JSON.stringify({
-        txHash,
-        lenderAddress,
-        lenderUserId: user.id,
-        borrowerId: String(loan.borrower_id),
-        loanId,
-        principalAmount: loan.principal_amount,
-        aprBps: loan.apr_bps,
-        durationDays: loan.duration_days,
-        fundedAt: now,
-      }),
+      // 2. Record ledger transaction
+      await tx.ledgerTransaction.create({
+        data: {
+          userId: user.id,
+          amount: loan.principalAmount,
+          status: "confirmed",
+          refType: "loan_fund",
+          refId: loanId,
+          txHash,
+          metadata: JSON.stringify({
+            lenderAddress,
+            lenderUserId: user.id,
+            borrowerId: loan.borrowerId,
+            loanId,
+            principalAmount: String(loan.principalAmount),
+            aprBps: loan.aprBps,
+            durationDays: loan.durationDays,
+            fundedAt: now.toISOString(),
+          }),
+        }
+      });
     });
 
     // ── Emit notifications ──
     const { createNotification } = await import("@/lib/notifications");
     // Notify Borrower
     await createNotification({
-      userId: String(loan.borrower_id),
+      userId: loan.borrowerId,
       title: "Loan Funded!",
-      message: `Great news! A lender has funded your loan of ${loan.principal_amount} XLM. The funds have been sent to your wallet.`,
+      message: `Great news! A lender has funded your loan of ${loan.principalAmount} XLM. The funds have been sent to your wallet.`,
       type: "loan_funded",
     });
     // Notify Lender
     await createNotification({
       userId: user.id,
       title: "Funding Successful",
-      message: `You successfully funded a ${loan.principal_amount} XLM loan. View 'Loans You Funded' for details.`,
+      message: `You successfully funded a ${loan.principalAmount} XLM loan. View 'Loans You Funded' for details.`,
       type: "investment_made",
     });
 
     return NextResponse.json(
       {
         loanId,
-        status: String(activatedLoan?.status ?? "active"),
+        status: "active",
         txHash,
         explorerUrl: `https://stellar.expert/explorer/testnet/tx/${txHash}`,
         message: "Loan funded successfully. The borrower will receive XLM in their wallet.",

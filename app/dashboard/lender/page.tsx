@@ -2,79 +2,63 @@ import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { WalletCard } from "@/components/dashboard/WalletCard";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getLenderDashboardMetrics, presentLenderMetrics } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils/formatting";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
 import Link from "next/link";
 
 export default async function LenderHomePage() {
   const { user } = await requireAuthenticatedUser("lender");
-  const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
+  const walletAddress = (user.user_metadata?.wallet_address as string | undefined) ?? null;
   const metrics = await getLenderDashboardMetrics(user.id);
-  const supabase = getServiceRoleClient();
-  const srClient = getServiceRoleClient();
 
-  const [positionsRes, profileRes, p2pRes, openLoanCountRes] = supabase && srClient
+  const [positions, profile, p2pInvestments, openLoanCount] = await Promise.all([
+    prisma.poolPosition.findMany({
+      where: { lenderId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { id: true, poolId: true, status: true, principalAmount: true, earnedInterest: true },
+    }).catch(() => []),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { fullName: true, kycStatus: true },
+    }).catch(() => null),
+    prisma.ledgerTransaction.findMany({
+      where: { userId: user.id, refType: "loan_fund" },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, refId: true, amount: true, status: true, metadata: true, createdAt: true },
+    }).catch(() => []),
+    prisma.loan.count({
+      where: { status: { in: ["requested", "approved"] } },
+    }).catch(() => 0),
+  ]);
+
+  // Fetch repayment tx hashes for funded loans
+  const fundedLoanIds = p2pInvestments.map(tx => tx.refId).filter(Boolean) as string[];
+  const [allLoans, repayTxns] = fundedLoanIds.length > 0
     ? await Promise.all([
-        supabase
-          .from("pool_positions")
-          .select("id, pool_id, status, principal_amount, earned_interest")
-          .eq("lender_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("profiles")
-          .select("full_name, kyc_status")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase
-          .from("ledger_transactions")
-          .select("id, ref_id, amount, status, metadata, created_at")
-          .eq("user_id", user.id)
-          .eq("ref_type", "loan_fund")
-          .order("created_at", { ascending: false })
-          .limit(20),
-        supabase
-          .from("loans")
-          .select("id", { count: "exact", head: true })
-          .in("status", ["requested", "approved"]),
+        prisma.loan.findMany({
+          where: { id: { in: fundedLoanIds } },
+          select: { id: true, status: true, repaidAmount: true, principalAmount: true },
+        }).catch(() => []),
+        prisma.ledgerTransaction.findMany({
+          where: { refType: "loan_repay", refId: { in: fundedLoanIds } },
+          select: { refId: true, metadata: true, amount: true },
+        }).catch(() => []),
       ])
-    : [{ data: [] }, { data: null }, { data: [] }, { count: 0 }];
+    : [[], []];
 
-  // 2. Fetch specific loans and repays based on funded loan IDs
-  const fundedLoanIds = (p2pRes?.data ?? []).map(tx => String(tx.ref_id));
-  
-  const [allLoansRes, repaysRes] = srClient && fundedLoanIds.length > 0
-    ? await Promise.all([
-        srClient
-          .from("loans")
-          .select("id, status, repaid_amount, principal_amount")
-          .in("id", fundedLoanIds),
-        srClient
-          .from("ledger_transactions")
-          .select("ref_id, metadata, amount")
-          .eq("ref_type", "loan_repay")
-          .in("ref_id", fundedLoanIds)
-      ])
-    : [{ data: [] }, { data: [] }];
-
-  const positions     = positionsRes.data ?? [];
-  const p2pInvestments = p2pRes.data ?? [];
-  const profile       = profileRes.data;
-  const openLoanCount = openLoanCountRes.count ?? 0;
-  const isKycVerified = profile?.kyc_status === "verified";
-  
-  const allLoansArray = allLoansRes.data ?? [];
-  const loanMap = Object.fromEntries(allLoansArray.map(l => [String(l.id), l]));
-
+  const loanMap = Object.fromEntries(allLoans.map(l => [l.id, l]));
   const repayMap: Record<string, string> = {};
-  for (const r of (repaysRes.data ?? [])) {
-     try {
-       const m = JSON.parse(String(r.metadata || "{}"));
-       if (m.txHash) repayMap[String(r.ref_id)] = m.txHash;
-     } catch {}
+  for (const r of repayTxns) {
+    try {
+      const m = JSON.parse(String(r.metadata ?? "{}")) as { txHash?: string };
+      if (m.txHash && r.refId) repayMap[r.refId] = m.txHash;
+    } catch {}
   }
 
+  const isKycVerified = profile?.kycStatus === "verified";
   const netEarnings = metrics.totalEarnings;
 
   return (
@@ -83,7 +67,7 @@ export default async function LenderHomePage() {
       heading="Welcome back 👋"
       description="Your lending overview at a glance. Use the navigation to fund loans or manage your pool investments."
       email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      userName={String(user.user_metadata?.full_name ?? profile?.fullName ?? "")}
       metrics={presentLenderMetrics(metrics)}
       headerWidget={(
         <WalletCard
@@ -213,14 +197,14 @@ export default async function LenderHomePage() {
                   <tbody>
                     {positions.map((pos) => (
                       <tr key={String(pos.id)}>
-                        <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>{String(pos.pool_id).slice(0, 8)}</td>
+                        <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>{String(pos.poolId).slice(0, 8)}</td>
                         <td>
                           <span style={{ padding: "0.15rem 0.5rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600, background: pos.status === "active" ? "rgba(34,207,157,0.12)" : "rgba(255,107,107,0.12)", color: pos.status === "active" ? "#22cf9d" : "#ff6b6b" }}>
                             {String(pos.status ?? "active").toUpperCase()}
                           </span>
                         </td>
-                        <td><strong>{Number(pos.principal_amount ?? 0).toFixed(2)} XLM</strong></td>
-                        <td style={{ color: "#22cf9d" }}>{Number(pos.earned_interest ?? 0).toFixed(4)} XLM</td>
+                        <td><strong>{Number(pos.principalAmount ?? 0).toFixed(2)} XLM</strong></td>
+                        <td style={{ color: "#22cf9d" }}>{Number(pos.earnedInterest ?? 0).toFixed(4)} XLM</td>
                       </tr>
                     ))}
                   </tbody>
@@ -251,11 +235,11 @@ export default async function LenderHomePage() {
                        } catch {}
 
                        // Find actual loan data
-                       const actualLoan = loanMap[String(tx.ref_id)];
+                       const actualLoan = loanMap[String(tx.refId)];
                        const rawStatus = actualLoan?.status ?? "processing";
 
 
-                       const repaid = Number(actualLoan?.repaid_amount ?? 0);
+                       const repaid = Number(actualLoan?.repaidAmount ?? 0);
                        const profit = Math.max(0, repaid - Number(tx.amount));
                        const isRepaid = rawStatus === "repaid";
                        const isDefaulted = rawStatus === "defaulted";
@@ -276,11 +260,11 @@ export default async function LenderHomePage() {
                              : "rgba(34,207,157,0.12)";
 
                        // Use repayment hash if it's repaid, otherwise fallback to funding hash
-                       const finalTxHash = (isRepaid && repayMap[String(tx.ref_id)]) ? repayMap[String(tx.ref_id)] : fundTxHash;
+                       const finalTxHash = (isRepaid && repayMap[String(tx.refId)]) ? repayMap[String(tx.refId)] : fundTxHash;
 
                        return (
                         <tr key={String(tx.id)}>
-                          <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>{String(tx.ref_id).slice(0, 8)}</td>
+                          <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>{String(tx.refId).slice(0, 8)}</td>
                           <td><strong>{Number(tx.amount ?? 0).toFixed(2)} XLM</strong></td>
                           <td>
                             <span style={{ padding: "0.15rem 0.5rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600, background: stBg, color: stColor }}>

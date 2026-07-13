@@ -6,75 +6,70 @@ import {
   getBorrowerDashboardMetrics,
   presentBorrowerMetrics,
 } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { buildStellarTxVerificationUrl, extractPossibleTxHash, isLikelyTxHash } from "@/lib/stellar/explorer";
 import { BorrowerRepayWidget } from "@/components/dashboard/BorrowerRepayWidget";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
 
 export default async function BorrowerDashboardPage() {
   const { user } = await requireAuthenticatedUser("borrower");
-  const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
+  const walletAddress = (user.user_metadata?.wallet_address as string | undefined) ?? null;
   const metrics = await getBorrowerDashboardMetrics(user.id);
 
-  const supabase = getServiceRoleClient();
-  const srClient = getServiceRoleClient();
-
-  const [profileRes, loansRes] = supabase
-    ? await Promise.all([
-        supabase
-          .from("profiles")
-          .select("full_name, phone, date_of_birth, country_code, kyc_status, risk_status, government_id_url, kyc_submitted_at")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase
-          .from("loans")
-          .select("id, status, principal_amount, repaid_amount, apr_bps, duration_days, due_at, created_at")
-          .eq("borrower_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(20),
-      ])
-    : [{ data: null }, { data: [] }];
-
-  const profile = profileRes.data;
-  const loans = loansRes.data ?? [];
+  const [profile, loans] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        fullName: true, phone: true, dateOfBirth: true, countryCode: true,
+        kycStatus: true, riskStatus: true, kycIpfsCid: true, kycSubmittedAt: true,
+      },
+    }).catch(() => null),
+    prisma.loan.findMany({
+      where: { borrowerId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: {
+        id: true, status: true, principalAmount: true, repaidAmount: true,
+        aprBps: true, durationDays: true, dueAt: true, createdAt: true,
+      },
+    }).catch(() => []),
+  ]);
 
   // Stellar TX lookups
-  const loanIds = loans.map((l) => String(l.id));
-  const ledgerRes = srClient && loanIds.length > 0
-    ? await srClient
-        .from("ledger_transactions")
-        .select("ref_id, metadata")
-        .eq("ref_type", "loan_fund")
-        .in("ref_id", loanIds)
-    : { data: [] };
+  const loanIds = loans.map(l => l.id);
+  const ledgerEntries = loanIds.length > 0
+    ? await prisma.ledgerTransaction.findMany({
+        where: { refType: "loan_fund", refId: { in: loanIds } },
+        select: { refId: true, metadata: true },
+      }).catch(() => [])
+    : [];
+
   const loanTxMap: Record<string, string> = {};
   const fundedLoanIds = new Set<string>();
-  for (const entry of ledgerRes.data ?? []) {
-    if (String(entry.ref_id)) {
-      fundedLoanIds.add(String(entry.ref_id));
+  for (const entry of ledgerEntries) {
+    if (entry.refId) {
+      fundedLoanIds.add(entry.refId);
       const extracted = extractPossibleTxHash(entry.metadata);
-      if (extracted) {
-        loanTxMap[String(entry.ref_id)] = extracted;
-      }
+      if (extracted) loanTxMap[entry.refId] = extracted;
     }
   }
 
-  const normalizedLoans = loans.map((loan) => {
-    const status = String(loan.status ?? "requested");
-    const hasFundingLedger = fundedLoanIds.has(String(loan.id));
+  const normalizedLoans = loans.map(loan => {
+    const status = loan.status ?? "requested";
+    const hasFundingLedger = fundedLoanIds.has(loan.id);
     const effectiveStatus = status === "requested" && hasFundingLedger ? "funded" : status;
     return { ...loan, effectiveStatus };
   });
 
-  const kycStatus = String(profile?.kyc_status ?? "pending");
+  const kycStatus = profile?.kycStatus ?? "pending";
   const isKycVerified = kycStatus === "verified";
-  const hasGovIdSubmission = Boolean(profile?.government_id_url || profile?.kyc_submitted_at || kycStatus === "submitted" || isKycVerified);
+  const hasGovIdSubmission = Boolean(profile?.kycIpfsCid || profile?.kycSubmittedAt || kycStatus === "submitted" || isKycVerified);
 
   const verificationItems = [
     { label: "Email Verified",      done: Boolean(user.email_confirmed_at) },
-    { label: "Legal Name Set",      done: Boolean(profile?.full_name) },
+    { label: "Legal Name Set",      done: Boolean(profile?.fullName) },
     { label: "Phone Number",        done: Boolean(profile?.phone) },
-    { label: "Date of Birth",       done: Boolean(profile?.date_of_birth) },
+    { label: "Date of Birth",       done: Boolean(profile?.dateOfBirth) },
     { label: "Government ID (KYC)", done: hasGovIdSubmission },
   ];
   const verificationProgress = Math.round((verificationItems.filter((i) => i.done).length / verificationItems.length) * 100);
@@ -88,13 +83,13 @@ export default async function BorrowerDashboardPage() {
   const REPAYABLE_STATUSES = ["active", "funded", "approved"];
   const activeLoans  = normalizedLoans.filter((l) => REPAYABLE_STATUSES.includes(String(l.effectiveStatus)));
   const pendingLoans = normalizedLoans.filter((l) => String(l.effectiveStatus) === "requested");
-  const inLoansXlm   = activeLoans.reduce((sum, l) => sum + Math.max(0, Number(l.principal_amount ?? 0) - Number(l.repaid_amount ?? 0)), 0);
-  const pendingXlm   = pendingLoans.reduce((sum, l) => sum + Number(l.principal_amount ?? 0), 0);
+  const inLoansXlm   = activeLoans.reduce((sum, l) => sum + Math.max(0, Number(l.principalAmount ?? 0) - Number(l.repaidAmount ?? 0)), 0);
+  const pendingXlm   = pendingLoans.reduce((sum, l) => sum + Number(l.principalAmount ?? 0), 0);
 
   // Pick first repayable loan for the quick repayment widget on home
   const repayableLoan = activeLoans[0] ?? null;
   const dueAmount = repayableLoan
-    ? Math.max(0, Number(repayableLoan.principal_amount ?? 0) - Number(repayableLoan.repaid_amount ?? 0))
+    ? Math.max(0, Number(repayableLoan.principalAmount ?? 0) - Number(repayableLoan.repaidAmount ?? 0))
     : 0;
 
   const statusBadge = (s: string): "yellow" | "blue" | "green" | "gold" => {
@@ -110,7 +105,7 @@ export default async function BorrowerDashboardPage() {
       heading="My Dashboard"
       description="Your active loans, verification status, and quick actions — all in one place."
       email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      userName={String(user.user_metadata?.full_name ?? profile?.fullName ?? "")}
       metrics={presentBorrowerMetrics(metrics)}
       headerWidget={
         <WalletCard
@@ -257,15 +252,17 @@ export default async function BorrowerDashboardPage() {
                     const hasTx  = isLikelyTxHash(txHash);
                     return (
                       <tr key={loanId} style={{ borderBottom: "1px solid #f9fafb" }}>
-                        <td style={{ padding: "0.75rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b7280" }}>{loanId.slice(0, 8)}</td>
-                        <td style={{ padding: "0.75rem", fontWeight: 700 }}>{Number(loan.principal_amount).toFixed(2)} XLM</td>
+                          <td style={{ padding: "0.75rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b7280" }}>{loanId.slice(0, 8)}...</td>
+                          <td style={{ padding: "0.75rem", fontWeight: 700 }}>{Number(loan.principalAmount).toFixed(2)} XLM</td>
                           <td style={{ padding: "0.75rem" }}>
                             <Badge variant={statusBadge(status)}>{status.toUpperCase()}</Badge>
                           </td>
-                        <td style={{ padding: "0.75rem" }}>{(Number(loan.apr_bps ?? 0) / 100).toFixed(2)}%</td>
-                        <td style={{ padding: "0.75rem", whiteSpace: "nowrap" }}>
-                          {loan.due_at ? new Date(String(loan.due_at)).toLocaleDateString() : "—"}
-                        </td>
+                          <td style={{ padding: "0.75rem", color: "#6b7280", fontSize: "0.85rem" }}>
+                            {(Number(loan.aprBps ?? 0) / 100).toFixed(2)}%
+                          </td>
+                          <td style={{ padding: "0.75rem", whiteSpace: "nowrap" }}>
+                            {loan.dueAt ? new Date(loan.dueAt).toLocaleDateString() : "—"}
+                          </td>
                         <td style={{ padding: "0.75rem" }}>
                           {hasTx ? (
                             <a href={buildStellarTxVerificationUrl(txHash)} target="_blank" rel="noreferrer"
@@ -292,9 +289,9 @@ export default async function BorrowerDashboardPage() {
           <BorrowerRepayWidget
             loan={{
               id: String(repayableLoan.id),
-              principal_amount: Number(repayableLoan.principal_amount),
-              repaid_amount: Number(repayableLoan.repaid_amount ?? 0),
-              due_at: repayableLoan.due_at ? String(repayableLoan.due_at) : null,
+              principal_amount: Number(repayableLoan.principalAmount),
+              repaid_amount: Number(repayableLoan.repaidAmount ?? 0),
+              due_at: repayableLoan.dueAt ? String(repayableLoan.dueAt) : null,
             }}
             dueAmount={dueAmount}
           />

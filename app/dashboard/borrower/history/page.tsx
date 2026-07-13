@@ -1,7 +1,7 @@
 import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getBorrowerDashboardMetrics, presentBorrowerMetrics } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { buildStellarTxVerificationUrl, isLikelyTxHash } from "@/lib/stellar/explorer";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
 
@@ -9,82 +9,50 @@ export default async function BorrowerHistoryPage() {
   const { user } = await requireAuthenticatedUser("borrower");
   const metrics  = await getBorrowerDashboardMetrics(user.id);
 
-  const supabase = getServiceRoleClient();
+  const [profile, loans] = await Promise.all([
+    prisma.user.findUnique({ where: { id: user.id }, select: { fullName: true } }).catch(() => null),
+    prisma.loan.findMany({
+      where: { borrowerId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, status: true, principalAmount: true, repaidAmount: true, aprBps: true, durationDays: true, dueAt: true, createdAt: true },
+    }).catch(() => [])
+  ]);
 
-  const [profileRes, loansRes] = supabase
+  const loanIds = loans.map((l) => l.id);
+
+  const [fundLedgers, requestLedgers, repayments, repayLedgers] = loanIds.length > 0
     ? await Promise.all([
-        supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
-        supabase
-          .from("loans")
-          .select("id, status, principal_amount, repaid_amount, apr_bps, duration_days, due_at, created_at")
-          .eq("borrower_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(50),
+        prisma.ledgerTransaction.findMany({ where: { refType: "loan_fund", refId: { in: loanIds } } }),
+        prisma.ledgerTransaction.findMany({ where: { refType: "loan_request", refId: { in: loanIds } } }),
+        prisma.payment.findMany({ where: { loanId: { in: loanIds } }, orderBy: { paidAt: "desc" }, take: 100 }),
+        prisma.ledgerTransaction.findMany({ where: { refType: "loan_repay" } }) // we'll filter this below by payment IDs or loan IDs
       ])
-    : [{ data: null }, { data: [] }];
-
-  const loans = loansRes.data ?? [];
-  const loanIds = loans.map((l) => String(l.id));
-
-  // Fetch Stellar TX hashes for funded loans
-  const ledgerRes = supabase && loanIds.length > 0
-    ? await supabase
-        .from("ledger_transactions")
-        .select("ref_id, metadata, created_at, amount")
-        .eq("ref_type", "loan_fund")
-        .in("ref_id", loanIds)
-    : { data: [] };
-
-  // Fetch request-stage ledger events to preserve full lifecycle visibility
-  const requestLedgerRes = supabase && loanIds.length > 0
-    ? await supabase
-        .from("ledger_transactions")
-        .select("ref_id, metadata, created_at, amount")
-        .eq("ref_type", "loan_request")
-        .in("ref_id", loanIds)
-    : { data: [] };
+    : [[], [], [], []];
 
   const loanTxMap: Record<string, { hash: string; amount: number; date: string }> = {};
-  for (const entry of ledgerRes.data ?? []) {
+  for (const entry of fundLedgers) {
     try {
-      const meta = JSON.parse(String(entry.metadata ?? "{}"));
-      if (String(entry.ref_id)) {
-        loanTxMap[String(entry.ref_id)] = {
-          hash:   String(meta.txHash ?? ""),
+      const meta = JSON.parse(String(entry.metadata ?? "{}")) as any;
+      if (entry.refId) {
+        loanTxMap[entry.refId] = {
+          hash: String(meta.txHash ?? ""),
           amount: Number(entry.amount ?? 0),
-          date:   String(entry.created_at ?? ""),
+          date: entry.createdAt.toISOString(),
         };
       }
     } catch { /* ignore */ }
   }
 
-  // Fetch all repayments for borrower's loans using the primary table
-  const repaymentsRes = supabase && loanIds.length > 0
-    ? await supabase
-        .from("loan_repayments")
-        .select("id, loan_id, amount, created_at")
-        .in("loan_id", loanIds)
-        .order("created_at", { ascending: false })
-        .limit(100)
-    : { data: [] };
-
-  const repayments = repaymentsRes.data ?? [];
-  const repaymentIds = repayments.map(r => String(r.id));
-
-  // Fetch stellar transaction details for those repayments (if on-chain)
-  const repayTxsRes = supabase && repaymentIds.length > 0
-    ? await supabase
-        .from("ledger_transactions")
-        .select("ref_id, metadata")
-        .eq("ref_type", "loan_repay")
-        .in("ref_id", repaymentIds)
-    : { data: [] };
-
+  // We map payments to their corresponding repay ledgers.
+  // Previously loan_repay refId matched the payment ID, or maybe the loan ID.
+  // In the new schema, we can map ledger to loan_id from metadata or refId.
   const repayTxMap: Record<string, string> = {};
-  for (const t of repayTxsRes.data ?? []) {
+  for (const t of repayLedgers) {
+    if (!loanIds.includes(t.refId || "")) continue;
     try {
-      const meta = JSON.parse(String(t.metadata ?? "{}"));
-      if (meta.txHash) repayTxMap[String(t.ref_id)] = String(meta.txHash);
+      const meta = JSON.parse(String(t.metadata ?? "{}")) as any;
+      if (meta.txHash) repayTxMap[t.refId!] = String(meta.txHash);
     } catch { /* ignore */ }
   }
 
@@ -102,20 +70,20 @@ export default async function BorrowerHistoryPage() {
   const transactions: TxEntry[] = [];
 
   const requestTxMap: Record<string, { date: string; amount: number }> = {};
-  for (const entry of requestLedgerRes.data ?? []) {
-    if (!entry.ref_id) continue;
-    requestTxMap[String(entry.ref_id)] = {
-      date: String(entry.created_at ?? ""),
+  for (const entry of requestLedgers) {
+    if (!entry.refId) continue;
+    requestTxMap[entry.refId] = {
+      date: entry.createdAt.toISOString(),
       amount: Number(entry.amount ?? 0),
     };
   }
 
-  // Request events (created for all new requests; fallback to loan.created_at for historical rows)
+  // Request events (created for all new requests; fallback to loan.createdAt for historical rows)
   for (const loan of loans) {
-    const loanId = String(loan.id);
+    const loanId = loan.id;
     const requestTx = requestTxMap[loanId];
-    const amount = requestTx?.amount ?? Number(loan.principal_amount ?? 0);
-    const date = requestTx?.date || String(loan.created_at ?? "");
+    const amount = requestTx?.amount ?? Number(loan.principalAmount ?? 0);
+    const date = requestTx?.date || loan.createdAt.toISOString();
 
     transactions.push({
       id: `request-${loanId}`,
@@ -130,7 +98,7 @@ export default async function BorrowerHistoryPage() {
 
   // Funding events
   for (const loan of loans) {
-    const loanId = String(loan.id);
+    const loanId = loan.id;
     const ledger = loanTxMap[loanId];
     if (ledger && ledger.amount > 0) {
       transactions.push({
@@ -138,7 +106,7 @@ export default async function BorrowerHistoryPage() {
         type: "funding_received",
         loanId,
         amount: ledger.amount,
-        date: ledger.date || String(loan.created_at ?? ""),
+        date: ledger.date || loan.createdAt.toISOString(),
         txHash: ledger.hash,
         loanStatus: String(loan.status),
       });
@@ -147,15 +115,15 @@ export default async function BorrowerHistoryPage() {
 
   // Repayment events
   for (const r of repayments) {
-    const loan = loans.find((l) => String(l.id) === String(r.loan_id));
-    const txHash = repayTxMap[String(r.id)] ?? "";
+    const loan = loans.find((l) => l.id === r.loanId);
+    const txHash = repayTxMap[r.id] ?? "";
 
     transactions.push({
       id: `repay-${r.id}`,
       type: "repayment_made",
-      loanId: String(r.loan_id),
+      loanId: r.loanId,
       amount: Number(r.amount),
-      date: String(r.created_at ?? ""),
+      date: r.paidAt.toISOString(),
       txHash,
       loanStatus: String(loan?.status ?? ""),
     });
@@ -174,7 +142,7 @@ export default async function BorrowerHistoryPage() {
       heading="Transaction History"
       description="Every funding received and repayment made — with on-chain verification links."
       email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profileRes.data?.full_name ?? "")}
+      userName={String(user.user_metadata?.full_name ?? profile?.fullName ?? "")}
       metrics={presentBorrowerMetrics(metrics)}
       currentPath="/dashboard/borrower/history"
       links={borrowerNavLinks}

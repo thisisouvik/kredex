@@ -1,56 +1,48 @@
 import { WorkspaceFrame } from "@/components/dashboard/WorkspaceFrame";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getLenderDashboardMetrics, presentLenderMetrics } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
 import { buildStellarTxVerificationUrl, isLikelyTxHash } from "@/lib/stellar/explorer";
 
 export default async function LenderHistoryPage() {
   const { user }  = await requireAuthenticatedUser("lender");
   const metrics   = await getLenderDashboardMetrics(user.id);
-  const supabase  = getServiceRoleClient();
-  const srClient  = getServiceRoleClient();
 
   // Profile data
-  const { data: profile } = supabase 
-    ? await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
-    : { data: null };
+  const profile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { fullName: true }
+  }).catch(() => null);
 
   // Fetch all transactions this lender initiated
-  const { data: userTxs } = supabase
-    ? await supabase
-        .from("ledger_transactions")
-        .select("id, category, ref_type, ref_id, amount, currency, status, metadata, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(100)
-    : { data: [] };
+  const userTxs = await prisma.ledgerTransaction.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  }).catch(() => []);
 
   // Fetch incoming payments (repayments to this lender, where the borrower initiated it)
-  // We use the Service Role Client to bypass borrower-owned table RLS
-  const { data: allRepays } = srClient
-    ? await srClient
-        .from("ledger_transactions")
-        .select("id, category, ref_type, ref_id, amount, currency, status, metadata, created_at")
-        .eq("ref_type", "loan_repay")
-        .order("created_at", { ascending: false })
-        .limit(200)
-    : { data: [] };
+  const allRepays = await prisma.ledgerTransaction.findMany({
+    where: { refType: "loan_repay" },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  }).catch(() => []);
 
-  const incomingRepays = (allRepays ?? []).filter(tx => {
+  const incomingRepays = allRepays.filter(tx => {
      try {
-       const meta = JSON.parse(String(tx.metadata || "{}"));
+       const meta = JSON.parse(String(tx.metadata || "{}")) as any;
        return String(meta.lenderUserId) === String(user.id) || String(meta.lenderAddress) === String(user.id);
      } catch { return false; }
   });
 
   // Merge, dedup, sort
   const txMap = new Map();
-  for (const t of (userTxs ?? [])) txMap.set(t.id, t);
+  for (const t of userTxs) txMap.set(t.id, t);
   for (const t of incomingRepays) txMap.set(t.id, t);
 
   const transactions = Array.from(txMap.values()).sort((a, b) => 
-    new Date(String(b.created_at)).getTime() - new Date(String(a.created_at)).getTime()
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
   return (
@@ -59,7 +51,7 @@ export default async function LenderHistoryPage() {
       heading="Transaction History"
       description="A full chronological record of every investment, pool deposit, and repayment — fully verifiable on-chain."
       email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      userName={String(user.user_metadata?.full_name ?? profile?.fullName ?? "")}
       metrics={presentLenderMetrics(metrics)}
       currentPath="/dashboard/lender/history"
       links={lenderNavLinks}
@@ -94,13 +86,13 @@ export default async function LenderHistoryPage() {
                 let colorClass = "gray"; // will map to styles
                 let sign = "";
 
-                if (tx.ref_type === "loan_fund") {
+                if (tx.refType === "loan_fund") {
                    label = "P2P Loan Deployed"; icon = "🏦"; colorClass = "purple"; sign = "-";
-                } else if (tx.ref_type === "loan_repay") {
+                } else if (tx.refType === "loan_repay") {
                    label = "Repayment Received"; icon = "📥"; colorClass = "green"; sign = "+";
-                } else if (tx.category === "pool_deposit") {
+                } else if (tx.metadata && JSON.parse(String(tx.metadata)).category === "pool_deposit") {
                    label = "Pool Deposit"; icon = "🌊"; colorClass = "blue"; sign = "-";
-                } else if (tx.category === "pool_withdraw") {
+                } else if (tx.metadata && JSON.parse(String(tx.metadata)).category === "pool_withdraw") {
                    label = "Pool Withdrawal"; icon = "💸"; colorClass = "green"; sign = "+";
                 }
 
@@ -136,7 +128,7 @@ export default async function LenderHistoryPage() {
                       <p style={{ margin: "0.15rem 0 0", fontSize: "0.75rem", color: "#9ca3af", fontFamily: "monospace" }}>
                         {subLabel}
                         {subLabel && " · "}
-                        {tx.created_at ? new Date(String(tx.created_at)).toLocaleString() : "—"}
+                        {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
                       </p>
                     </div>
 

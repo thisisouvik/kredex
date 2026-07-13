@@ -1,4 +1,4 @@
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 
 export interface BorrowerDashboardMetrics {
   reputationScore: number;
@@ -23,9 +23,7 @@ export interface AdminDashboardMetrics {
 }
 
 function toCurrency(value: number): string {
-  return `${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 0,
-  }).format(value)} XLM`;
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)} XLM`;
 }
 
 function toPercentage(value: number): string {
@@ -60,6 +58,7 @@ export function presentAdminMetrics(metrics: AdminDashboardMetrics) {
   ];
 }
 
+// ── Borrower Metrics ──────────────────────────────────────────────────────────
 
 export async function getBorrowerDashboardMetrics(userId: string): Promise<BorrowerDashboardMetrics> {
   const { withCache } = await import("@/lib/redis/cache");
@@ -67,33 +66,22 @@ export async function getBorrowerDashboardMetrics(userId: string): Promise<Borro
 }
 
 async function _getBorrowerDashboardMetrics(userId: string): Promise<BorrowerDashboardMetrics> {
-  const supabase = await getServerSupabaseClient();
-
-  if (!supabase) {
-    return { reputationScore: 0, availableCredit: 0, activeLoans: 0, pendingLoans: 0, repaymentRate: 0 };
-  }
+  const BASE_REPUTATION = 250;
 
   try {
-    const [eventsRes, loansRes] = await Promise.all([
-      supabase
-        .from("reputation_events")
-        .select("points_delta")
-        .eq("user_id", userId),
-      supabase
-        .from("loans")
-        .select("status")
-        .eq("borrower_id", userId),
-    ]);
+    const loans = await prisma.loan.findMany({
+      where: { borrowerId: userId },
+      select: { status: true },
+    });
 
-    const events = eventsRes.data ?? [];
-    const reputationPoints = events.reduce((sum, row) => sum + Number(row.points_delta ?? 0), 0);
-    const reputation = Math.max(0, 250 + reputationPoints);
-    const loans = loansRes.data ?? [];
+    const pendingLoans   = loans.filter(l => l.status === "requested").length;
+    const activeLoans    = loans.filter(l => ["active", "funded", "approved"].includes(l.status)).length;
+    const repaidLoans    = loans.filter(l => l.status === "repaid").length;
+    const defaultedLoans = loans.filter(l => l.status === "defaulted").length;
 
-    const pendingLoans  = loans.filter((loan) => loan.status === "requested").length;
-    const activeLoans   = loans.filter((loan) => ["active", "funded", "approved"].includes(loan.status)).length;
-    const repaidLoans   = loans.filter((loan) => loan.status === "repaid").length;
-    const defaultedLoans = loans.filter((loan) => loan.status === "defaulted").length;
+    // Reputation: base + 50 per repaid, -100 per default
+    const reputation = Math.max(0, BASE_REPUTATION + repaidLoans * 50 - defaultedLoans * 100);
+
     const repaymentBase = repaidLoans + defaultedLoans;
     const repaymentRate = repaymentBase > 0 ? (repaidLoans / repaymentBase) * 100 : 100;
 
@@ -105,9 +93,11 @@ async function _getBorrowerDashboardMetrics(userId: string): Promise<BorrowerDas
       repaymentRate,
     };
   } catch {
-    return { reputationScore: 250, availableCredit: 2500, activeLoans: 0, pendingLoans: 0, repaymentRate: 0 };
+    return { reputationScore: BASE_REPUTATION, availableCredit: 2500, activeLoans: 0, pendingLoans: 0, repaymentRate: 100 };
   }
 }
+
+// ── Lender Metrics ────────────────────────────────────────────────────────────
 
 export async function getLenderDashboardMetrics(userId: string): Promise<LenderDashboardMetrics> {
   const { withCache } = await import("@/lib/redis/cache");
@@ -115,92 +105,70 @@ export async function getLenderDashboardMetrics(userId: string): Promise<LenderD
 }
 
 async function _getLenderDashboardMetrics(userId: string): Promise<LenderDashboardMetrics> {
-  const { getServerSupabaseClient, getServiceRoleClient } = await import("@/lib/supabase/server");
-  const supabase = await getServerSupabaseClient();
-  const srClient = getServiceRoleClient();
-
-  if (!supabase || !srClient) {
-    return { deployedCapital: 0, totalEarnings: 0, activePositions: 0, defaultRate: 0 };
-  }
-
   try {
-    // 1. Pool positions
-    const positionsRes = await supabase
-      .from("pool_positions")
-      .select("status, principal_amount, earned_interest")
-      .eq("lender_id", userId);
+    const [positions, p2pFunds] = await Promise.all([
+      prisma.poolPosition.findMany({
+        where: { lenderId: userId },
+        select: { status: true, principalAmount: true, earnedInterest: true },
+      }),
+      prisma.ledgerTransaction.findMany({
+        where: { userId, refType: "loan_fund" },
+        select: { amount: true, refId: true },
+      }),
+    ]);
 
-    const positions = positionsRes.data ?? [];
-    const poolDeployed = positions.reduce((s, r) => s + Number(r.principal_amount ?? 0), 0);
-    const poolEarnings = positions.reduce((s, r) => s + Number(r.earned_interest   ?? 0), 0);
-    const poolActive   = positions.filter((r) => r.status === "active").length;
+    const poolDeployed = positions.reduce((s, r) => s + Number(r.principalAmount), 0);
+    const poolEarnings = positions.reduce((s, r) => s + Number(r.earnedInterest), 0);
+    const poolActive   = positions.filter(r => r.status === "active").length;
 
-    // 2. P2P Metrics
-    const { data: p2pFunds } = await supabase
-      .from("ledger_transactions")
-      .select("amount, ref_id")
-      .eq("user_id", userId)
-      .eq("ref_type", "loan_fund");
+    const fundedLoanIds = p2pFunds.map(tx => tx.refId).filter(Boolean) as string[];
 
-    const fundedLoanIds = (p2pFunds ?? []).map(tx => String(tx.ref_id));
+    const p2pRepays = fundedLoanIds.length > 0
+      ? await prisma.ledgerTransaction.findMany({
+          where: { refType: "loan_repay", refId: { in: fundedLoanIds } },
+          select: { amount: true, refId: true, metadata: true },
+        })
+      : [];
 
-    const { data: p2pRepays } = fundedLoanIds.length > 0 
-      ? await srClient
-          .from("ledger_transactions")
-          .select("amount, metadata, ref_id")
-          .eq("ref_type", "loan_repay")
-          .in("ref_id", fundedLoanIds)
-      : { data: [] };
-
-    const lenderRepays = (p2pRepays ?? []).filter(tx => {
+    const lenderRepays = p2pRepays.filter(tx => {
       try {
-        const meta = JSON.parse(String(tx.metadata || "{}"));
-        return String(meta.lenderUserId) === String(userId) || String(meta.lenderAddress) === String(userId);
+        const meta = JSON.parse(String(tx.metadata ?? "{}")) as { lenderUserId?: string };
+        return meta.lenderUserId === userId;
       } catch { return false; }
     });
 
     const loanProfitMap = new Map<string, { deployed: number; received: number }>();
-
-    for (const tx of (p2pFunds ?? [])) {
-      const id = String(tx.ref_id);
+    for (const tx of p2pFunds) {
+      const id = tx.refId!;
       const cur = loanProfitMap.get(id) ?? { deployed: 0, received: 0 };
-      cur.deployed += Number(tx.amount ?? 0);
+      cur.deployed += Number(tx.amount);
       loanProfitMap.set(id, cur);
     }
-
     for (const tx of lenderRepays) {
-      const id = String(tx.ref_id);
-      if (id && loanProfitMap.has(id)) {
+      const id = tx.refId!;
+      if (loanProfitMap.has(id)) {
         const cur = loanProfitMap.get(id)!;
-        cur.received += Number(tx.amount ?? 0);
+        cur.received += Number(tx.amount);
         loanProfitMap.set(id, cur);
       }
     }
 
-    let p2pEarnings = 0;
-    let p2pDeployed = 0;
-    let p2pActive = 0;
-    
+    let p2pEarnings = 0, p2pDeployed = 0, p2pActive = 0;
     for (const stats of loanProfitMap.values()) {
-       p2pDeployed += stats.deployed;
-       if (stats.received > 0) {
-          const profit = stats.received - stats.deployed;
-          if (profit > 0) p2pEarnings += profit;
-       } else {
-          p2pActive++;
-       }
+      p2pDeployed += stats.deployed;
+      if (stats.received > 0) {
+        const profit = stats.received - stats.deployed;
+        if (profit > 0) p2pEarnings += profit;
+      } else {
+        p2pActive++;
+      }
     }
 
-    // 3. Defaults
-    const defaultsRes = await srClient
-      .from("ledger_transactions")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("ref_type", "loan_fund")
-      .contains("metadata", { status: "defaulted" });
-    const defaults = defaultsRes.data?.length ?? 0;
-    const totalLoans = (p2pFunds?.length ?? 0) + positions.length;
-    const defaultRate = totalLoans > 0 ? (defaults / totalLoans) * 100 : 0;
+    const [defaultCount, totalCount] = await Promise.all([
+      prisma.loan.count({ where: { lenderId: userId, status: "defaulted" } }),
+      prisma.loan.count({ where: { lenderId: userId } }),
+    ]);
+    const defaultRate = totalCount > 0 ? (defaultCount / totalCount) * 100 : 0;
 
     return {
       deployedCapital: poolDeployed + p2pDeployed,
@@ -213,25 +181,17 @@ async function _getLenderDashboardMetrics(userId: string): Promise<LenderDashboa
   }
 }
 
-export async function getAdminDashboardMetrics(): Promise<AdminDashboardMetrics> {
-  const supabase = await getServerSupabaseClient();
-  if (!supabase) return { totalUsers: 0, totalLoans: 0, activeLoans: 0, highRiskUsers: 0 };
+// ── Admin Metrics ─────────────────────────────────────────────────────────────
 
+export async function getAdminDashboardMetrics(): Promise<AdminDashboardMetrics> {
   try {
-    const [usersRes, totalLoansRes, activeLoansRes, highRiskRes] = await Promise.all([
-      supabase.from("profiles").select("id", { count: "exact", head: true }),
-      supabase.from("loans").select("id", { count: "exact", head: true }),
-      supabase.from("loans").select("id", { count: "exact", head: true })
-        .in("status", ["approved", "funded", "active", "requested"]),
-      supabase.from("profiles").select("id", { count: "exact", head: true })
-        .in("risk_status", ["high", "blocked"]),
+    const [totalUsers, totalLoans, activeLoans, highRiskUsers] = await Promise.all([
+      prisma.user.count(),
+      prisma.loan.count(),
+      prisma.loan.count({ where: { status: { in: ["approved", "funded", "active", "requested"] } } }),
+      prisma.user.count({ where: { riskStatus: { in: ["high", "blocked"] } } }),
     ]);
-    return {
-      totalUsers:    usersRes.count    ?? 0,
-      totalLoans:    totalLoansRes.count ?? 0,
-      activeLoans:   activeLoansRes.count ?? 0,
-      highRiskUsers: highRiskRes.count ?? 0,
-    };
+    return { totalUsers, totalLoans, activeLoans, highRiskUsers };
   } catch {
     return { totalUsers: 0, totalLoans: 0, activeLoans: 0, highRiskUsers: 0 };
   }
