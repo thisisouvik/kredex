@@ -102,7 +102,8 @@ export async function POST(request: NextRequest) {
       {
         position: {
           ...position,
-          principalAmount: position.principalAmount.toString()
+          principalAmount: position.principalAmount.toString(),
+          earnedInterest: position.earnedInterest ? position.earnedInterest.toString() : "0"
         },
         txHash,
         explorerUrl: `https://stellar.expert/explorer/testnet/tx/${txHash}`,

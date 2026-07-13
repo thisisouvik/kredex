@@ -117,8 +117,8 @@ async function _getLenderDashboardMetrics(userId: string): Promise<LenderDashboa
       }),
     ]);
 
-    const poolDeployed = positions.reduce((s, r) => s + Number(r.principalAmount), 0);
-    const poolEarnings = positions.reduce((s, r) => s + Number(r.earnedInterest), 0);
+    const poolDeployed = positions.reduce((s, r) => s + Number(r.principalAmount) / 10_000_000, 0);
+    const poolEarnings = positions.reduce((s, r) => s + Number(r.earnedInterest) / 10_000_000, 0);
     const poolActive   = positions.filter(r => r.status === "active").length;
 
     const fundedLoanIds = p2pFunds.map(tx => tx.refId).filter(Boolean) as string[];
@@ -141,14 +141,14 @@ async function _getLenderDashboardMetrics(userId: string): Promise<LenderDashboa
     for (const tx of p2pFunds) {
       const id = tx.refId!;
       const cur = loanProfitMap.get(id) ?? { deployed: 0, received: 0 };
-      cur.deployed += Number(tx.amount);
+      cur.deployed += Number(tx.amount) / 10_000_000;
       loanProfitMap.set(id, cur);
     }
     for (const tx of lenderRepays) {
       const id = tx.refId!;
       if (loanProfitMap.has(id)) {
         const cur = loanProfitMap.get(id)!;
-        cur.received += Number(tx.amount);
+        cur.received += Number(tx.amount) / 10_000_000;
         loanProfitMap.set(id, cur);
       }
     }

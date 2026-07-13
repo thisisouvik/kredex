@@ -20,7 +20,7 @@ export async function createLendingPool(formData: FormData): Promise<{ success: 
     if (!aprBps || aprBps <= 0 || aprBps > 10000)
       return { success: false, error: "APR must be between 0.01% and 100%" };
 
-    const apy = aprBps / 100;
+    const apy = aprBps / 10000;
 
     await prisma.pool.create({
       data: {

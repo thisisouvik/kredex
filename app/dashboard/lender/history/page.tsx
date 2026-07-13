@@ -101,8 +101,9 @@ export default async function LenderHistoryPage() {
               {transactions.map((tx) => {
                 let txHash = "";
                 let subLabel = "";
+                let meta: Record<string, unknown> = {};
                 try {
-                  const meta = (typeof tx.metadata === "string" ? JSON.parse(tx.metadata) : (tx.metadata || {})) as Record<string, unknown>;
+                  meta = (typeof tx.metadata === "string" ? JSON.parse(tx.metadata) : (tx.metadata || {})) as Record<string, unknown>;
                   txHash = String(tx.txHash || meta.txHash || "");
                   if (meta.loanId) subLabel = `Loan #${String(meta.loanId).slice(0,8)}`;
                   else if (tx.refId) subLabel = `Ref #${String(tx.refId).slice(0,8)}`;
@@ -119,9 +120,9 @@ export default async function LenderHistoryPage() {
                    label = "P2P Loan Deployed"; icon = "🏦"; colorClass = "purple"; sign = "-";
                 } else if (tx.refType === "loan_repay") {
                    label = "Repayment Received"; icon = "📥"; colorClass = "green"; sign = "+";
-                } else if (tx.metadata && JSON.parse(String(tx.metadata)).category === "pool_deposit") {
+                } else if (tx.refType === "pool_deposit" || meta.category === "pool_deposit") {
                    label = "Pool Deposit"; icon = "🌊"; colorClass = "blue"; sign = "-";
-                } else if (tx.metadata && JSON.parse(String(tx.metadata)).category === "pool_withdraw") {
+                } else if (tx.refType === "pool_withdraw" || meta.category === "pool_withdraw") {
                    label = "Pool Withdrawal"; icon = "💸"; colorClass = "green"; sign = "+";
                 }
 
@@ -164,7 +165,7 @@ export default async function LenderHistoryPage() {
                     {/* Amount */}
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
                       <p style={{ margin: 0, fontWeight: 800, fontSize: "0.95rem", color: c.text }}>
-                        {sign}{Number(tx.amount).toFixed(2)} XLM
+                        {sign}{(Number(tx.amount) / 10_000_000).toFixed(2)} XLM
                       </p>
                     </div>
 
