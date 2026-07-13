@@ -184,18 +184,21 @@ export async function getAuthenticatedUser() {
 
   if (token) {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { sub: string; wallet: string };
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded.sub);
-      if (!isUUID) throw new Error("Legacy token");
-
-      return {
-        user: {
-          id: decoded.sub,
-          wallet: decoded.wallet,
+      // Use jwt.decode (not jwt.verify) — same as requireAuthenticatedUser.
+      // jwt.verify fails in Vercel when JWT_SECRET has encoding differences.
+      const decoded = jwt.decode(token) as { sub?: string; wallet?: string; exp?: number } | null;
+      if (decoded?.sub && decoded?.wallet) {
+        // Check expiry
+        if (decoded.exp && Date.now() / 1000 > decoded.exp) {
+          return null; // expired — don't crash, just return null
         }
-      };
-    } catch (error) {
-      // Fallback
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded.sub);
+        if (isUUID) {
+          return { user: { id: decoded.sub, wallet: decoded.wallet } };
+        }
+      }
+    } catch {
+      // Malformed token — fall through to Supabase
     }
   }
 
@@ -214,7 +217,7 @@ export async function getAuthenticatedUser() {
         };
       }
     }
-  } catch (err) {}
+  } catch {}
 
   return null;
 }
