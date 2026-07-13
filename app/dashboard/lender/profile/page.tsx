@@ -6,7 +6,6 @@ import {
   presentLenderMetrics,
 } from "@/lib/dashboard/metrics";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
-import { getServiceRoleClient } from "@/lib/supabase/server";
 
 const KYC_CONFIG: Record<
   string,
@@ -18,22 +17,19 @@ const KYC_CONFIG: Record<
   rejected:  { label: "Action Needed", color: "#dc2626", bg: "rgba(220,38,38,0.08)",     icon: "❌", description: "Submission rejected. Re-upload a clear government ID." },
 };
 
+import prisma from "@/lib/prisma";
+import { redirect } from "next/navigation";
+
 export default async function LenderProfilePage() {
-  const { user } = await requireAuthenticatedUser("lender");
+  const { user: authUser } = await requireAuthenticatedUser("lender");
+  const user = await prisma.user.findUnique({ where: { id: authUser.id } });
+  if (!user) return redirect("/auth");
+
   const metrics = await getLenderDashboardMetrics(user.id);
 
-  const supabase = getServiceRoleClient();
-  const { data: profile } = supabase
-    ? await supabase
-        .from("profiles")
-        .select("full_name, phone, date_of_birth, role, kyc_status, risk_status, government_id_url, kyc_submitted_at")
-        .eq("id", user.id)
-        .maybeSingle()
-    : { data: null as Record<string, unknown> | null };
-
-  const kycStatusKey = String(profile?.kyc_status ?? "pending") as keyof typeof KYC_CONFIG;
+  const kycStatusKey = String(user.kycStatus ?? "pending") as keyof typeof KYC_CONFIG;
   const kycInfo = KYC_CONFIG[kycStatusKey] ?? KYC_CONFIG.pending;
-  const hasGovId = Boolean(profile?.government_id_url || profile?.kyc_submitted_at);
+  const hasGovId = Boolean(user.kycIpfsCid || user.kycSubmittedAt);
 
   return (
     <WorkspaceFrame
@@ -41,7 +37,7 @@ export default async function LenderProfilePage() {
       heading="Profile Settings & Security"
       description="Update your personal details and complete required compliance checks to manage lending pools."
       email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      userName={String(user.fullName ?? "")}
       metrics={presentLenderMetrics(metrics)}
       currentPath="/dashboard/lender/profile"
       links={lenderNavLinks}
@@ -53,12 +49,14 @@ export default async function LenderProfilePage() {
             Provide accurate details to generate your on-chain KYC certificate for lender compliance.
           </p>
           <ProfileSettingsForm
-            initialName={String(profile?.full_name ?? "")}
-            initialPhone={String(profile?.phone ?? "")}
-            initialDob={profile?.date_of_birth ? String(profile.date_of_birth) : ""}
+            initialName={String(user.fullName ?? "")}
+            initialPhone={String(user.phone ?? "")}
+            initialDob={user.dateOfBirth ? String(user.dateOfBirth) : ""}
+            initialEmail={String(user.email ?? "")}
+            initialEmailUpdatedAt={user.emailUpdatedAt ? String(user.emailUpdatedAt) : ""}
             kycStatus={kycStatusKey}
             hasGovId={hasGovId}
-            emailConfirmed={Boolean(user.email_confirmed_at)}
+            emailConfirmed={Boolean(user.email)}
           />
         </article>
 
@@ -88,9 +86,9 @@ export default async function LenderProfilePage() {
                 <p style={{ fontSize: "0.82rem", color: "#4b5563", lineHeight: 1.5 }}>
                   {kycInfo.description}
                 </p>
-                {profile?.kyc_submitted_at && (
+                {user.kycSubmittedAt && (
                   <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.35rem" }}>
-                    Submitted: {new Date(String(profile.kyc_submitted_at)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    Submitted: {new Date(String(user.kycSubmittedAt)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                   </p>
                 )}
               </div>
@@ -121,26 +119,17 @@ export default async function LenderProfilePage() {
               <li>
                 <span>Role</span>
                 <span style={{ fontSize: "0.75rem", background: "rgba(34,207,157,0.08)", color: "#16a07a", padding: "0.2rem 0.6rem", borderRadius: "999px", fontWeight: 600, textTransform: "capitalize" }}>
-                  {String(profile?.role ?? "lender")}
+                  {String(user.role ?? "lender")}
                 </span>
               </li>
               <li>
                 <span>Email Verified</span>
-                <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", color: user.email_confirmed_at ? "#16a07a" : "#d97706", fontWeight: 600 }}>
-                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: user.email_confirmed_at ? "#22cf9d" : "#f59e0b", display: "inline-block" }} />
-                  {user.email_confirmed_at ? "Verified" : "Not verified"}
+                <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", color: user.email ? "#16a07a" : "#d97706", fontWeight: 600 }}>
+                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: user.email ? "#22cf9d" : "#f59e0b", display: "inline-block" }} />
+                  {user.email ? "Verified" : "Not verified"}
                 </span>
               </li>
-              <li>
-                <span>Member Since</span>
-                <strong style={{ fontSize: "0.82rem" }}>
-                  {user.created_at ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "—"}
-                </strong>
-              </li>
             </ul>
-            <div className="workspace-inline-actions" style={{ marginTop: "1rem" }}>
-              <button type="button" className="workspace-nav-link">Change Password</button>
-            </div>
           </article>
         </div>
       </div>

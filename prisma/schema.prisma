@@ -16,6 +16,7 @@ model User {
   // Identity
   fullName        String?   @default("Wallet User") @map("full_name")
   email           String?
+  emailUpdatedAt  DateTime? @map("email_updated_at")
   phone           String?
   dateOfBirth     DateTime? @map("date_of_birth")
   countryCode     String?   @map("country_code")

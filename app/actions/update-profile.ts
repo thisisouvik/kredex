@@ -1,17 +1,13 @@
 "use server";
 
-/**
- * Server Action: Update user profile fields
- * Uses getServerSupabaseClient() — authenticated via cookie (anon key + user JWT).
- * DB writes are done with the caller session and enforced by RLS.
- */
-
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAuthenticatedUser } from "@/lib/auth/session";
+import prisma from "@/lib/prisma";
 
 interface ProfileUpdatePayload {
   full_name: string;
   phone: string;
   date_of_birth?: string;
+  email?: string;
 }
 
 interface ProfileUpdateResult {
@@ -23,24 +19,17 @@ export async function updateUserProfile(
   payload: ProfileUpdatePayload
 ): Promise<ProfileUpdateResult> {
   try {
-    // 1. Identify the caller using the cookie-based client (verifies their JWT)
-    const supabase = await getServerSupabaseClient();
-    if (!supabase) {
-      return { success: false, error: "Authentication service unavailable." };
-    }
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return { success: false, error: "You must be logged in to update your profile." };
+    // 1. Authenticate user
+    const { user: authUser } = await requireAuthenticatedUser();
+    const user = await prisma.user.findUnique({ where: { id: authUser.id } });
+    if (!user) {
+      return { success: false, error: "User not found." };
     }
 
     // 2. Validate required fields
     const name = payload.full_name?.trim() ?? "";
     const phone = payload.phone?.trim() ?? "";
+    const email = payload.email?.trim() ?? "";
 
     if (name.length < 2) {
       return { success: false, error: "Full legal name must be at least 2 characters." };
@@ -49,14 +38,12 @@ export async function updateUserProfile(
       return { success: false, error: "Please enter a valid phone number." };
     }
 
-    // 3. Build update object — only columns that exist in profiles
-    const updates: Record<string, string> = {
-      full_name: name,
+    const updates: any = {
+      fullName: name,
       phone: phone,
     };
 
     if (payload.date_of_birth && payload.date_of_birth.trim() !== "") {
-      // Basic date validation (YYYY-MM-DD)
       const dob = new Date(payload.date_of_birth);
       const eighteenYearsAgo = new Date();
       eighteenYearsAgo.setFullYear(eighteenYearsAgo.getFullYear() - 18);
@@ -67,30 +54,28 @@ export async function updateUserProfile(
       if (dob > eighteenYearsAgo) {
         return { success: false, error: "You must be at least 18 years old." };
       }
-      updates.date_of_birth = payload.date_of_birth.trim();
+      updates.dateOfBirth = dob;
+    } else {
+      updates.dateOfBirth = null;
     }
 
-    // 4. Write with the caller session; RLS restricts updates to the caller row
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("id", user.id);
-
-    if (updateError) {
-      console.error("[Kredex] Profile update error:", updateError);
-      return {
-        success: false,
-        error: updateError.message ?? "Failed to update profile.",
-      };
+    if (email && email !== user.email) {
+      // Check 24-hour edit limit
+      if (user.emailUpdatedAt && (Date.now() - user.emailUpdatedAt.getTime() < 24 * 60 * 60 * 1000)) {
+        return { success: false, error: "Email can only be updated once every 24 hours." };
+      }
+      updates.email = email;
+      updates.emailUpdatedAt = new Date();
     }
 
-    console.log(`[Kredex] Profile updated for user ${user.id}`);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updates,
+    });
+
     return { success: true };
-  } catch (err) {
-    console.error("[Kredex] updateUserProfile unexpected error:", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "An unexpected error occurred.",
-    };
+  } catch (err: unknown) {
+    console.error("Profile update error:", err);
+    return { success: false, error: "Internal server error during update." };
   }
 }

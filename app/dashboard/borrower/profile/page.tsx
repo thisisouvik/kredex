@@ -8,6 +8,8 @@ import {
 } from "@/lib/dashboard/metrics";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
 import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
+import { redirect } from "next/navigation";
 
 // Compliance status config
 const KYC_CONFIG: Record<
@@ -55,41 +57,32 @@ const RISK_CONFIG: Record<
 };
 
 export default async function BorrowerProfilePage() {
-  const { user } = await requireAuthenticatedUser("borrower");
-  const metrics = await getBorrowerDashboardMetrics(user.id);
+  const { user: authUser } = await requireAuthenticatedUser("borrower");
+  const user = await prisma.user.findUnique({ where: { id: authUser.id } });
+  if (!user) return redirect("/auth");
 
-  const supabase = getServiceRoleClient();
-  
-  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id);
-  
-  const { data: profile } = (supabase && isUUID)
-    ? await supabase
-        .from("profiles")
-        .select("full_name, phone, date_of_birth, role, country_code, kyc_status, risk_status, government_id_url, kyc_submitted_at")
-        .eq("id", user.id)
-        .maybeSingle()
-    : { data: null as Record<string, unknown> | null };
+  const metrics = await getBorrowerDashboardMetrics(user.id);
 
   // Compute real profile completion based on actual data
   const checks = [
-    { label: "Email confirmed",    done: Boolean(user.email_confirmed_at) },
-    { label: "Full name",          done: Boolean(profile?.full_name && String(profile.full_name).trim().length > 1) },
-    { label: "Phone number",       done: Boolean(profile?.phone && String(profile.phone).trim().length > 4) },
-    { label: "Date of birth",      done: Boolean(profile?.date_of_birth) },
-    { label: "Government ID",      done: Boolean(profile?.government_id_url || profile?.kyc_submitted_at) },
+    { label: "Email confirmed",    done: Boolean(user.email) },
+    { label: "Full name",          done: Boolean(user.fullName && String(user.fullName).trim().length > 1) },
+    { label: "Phone number",       done: Boolean(user.phone && String(user.phone).trim().length > 4) },
+    { label: "Date of birth",      done: Boolean(user.dateOfBirth) },
+    { label: "Government ID",      done: Boolean(user.kycIpfsCid || user.kycSubmittedAt) },
   ];
 
   const completedCount = checks.filter((c) => c.done).length;
   const completionPct = Math.round((completedCount / checks.length) * 100);
   const missingItems = checks.filter((c) => !c.done).map((c) => c.label);
 
-  const kycStatusKey = String(profile?.kyc_status ?? "pending") as keyof typeof KYC_CONFIG;
-  const riskStatusKey = String(profile?.risk_status ?? "medium") as keyof typeof RISK_CONFIG;
+  const kycStatusKey = String(user.kycStatus ?? "pending") as keyof typeof KYC_CONFIG;
+  const riskStatusKey = "medium" as keyof typeof RISK_CONFIG; // Prisma doesn't have riskStatus right now
   const kycInfo  = KYC_CONFIG[kycStatusKey]  ?? KYC_CONFIG.pending;
   const riskInfo = RISK_CONFIG[riskStatusKey] ?? RISK_CONFIG.medium;
 
   const profileIsComplete = completionPct === 100;
-  const hasGovId = Boolean(profile?.government_id_url || profile?.kyc_submitted_at);
+  const hasGovId = Boolean(user.kycIpfsCid || user.kycSubmittedAt);
 
   return (
     <WorkspaceFrame
@@ -97,7 +90,7 @@ export default async function BorrowerProfilePage() {
       heading="Profile Settings & Verification"
       description="Update your personal details and complete KYC milestones to unlock full platform features."
       email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      userName={String(user.fullName ?? "")}
       metrics={presentBorrowerMetrics(metrics)}
       currentPath="/dashboard/borrower/profile"
       profilePath="/dashboard/borrower/profile"
@@ -207,12 +200,14 @@ export default async function BorrowerProfilePage() {
           </div>
 
           <ProfileSettingsForm
-            initialName={String(profile?.full_name ?? "")}
-            initialPhone={String(profile?.phone ?? "")}
-            initialDob={profile?.date_of_birth ? String(profile.date_of_birth) : ""}
+            initialName={String(user.fullName ?? "")}
+            initialPhone={String(user.phone ?? "")}
+            initialDob={user.dateOfBirth ? String(user.dateOfBirth) : ""}
+            initialEmail={String(user.email ?? "")}
+            initialEmailUpdatedAt={user.emailUpdatedAt ? String(user.emailUpdatedAt) : ""}
             kycStatus={kycStatusKey}
             hasGovId={hasGovId}
-            emailConfirmed={Boolean(user.email_confirmed_at)}
+            emailConfirmed={Boolean(user.email)}
           />
         </article>
 
@@ -253,10 +248,10 @@ export default async function BorrowerProfilePage() {
                 <p style={{ fontSize: "0.82rem", color: "#4b5563", lineHeight: 1.5 }}>
                   {kycInfo.description}
                 </p>
-                {profile?.kyc_submitted_at && (
+                {user.kycSubmittedAt && (
                   <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.35rem" }}>
                     Submitted:{" "}
-                    {new Date(String(profile.kyc_submitted_at)).toLocaleDateString("en-US", {
+                    {new Date(String(user.kycSubmittedAt)).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
@@ -325,7 +320,7 @@ export default async function BorrowerProfilePage() {
                 Reputation Badge
               </h3>
               <ReputationBadge
-                walletAddress={user.wallet}
+                walletAddress={user.walletAddress}
                 reputationScore={metrics?.reputationScore ?? undefined}
               />
             </div>
@@ -357,7 +352,7 @@ export default async function BorrowerProfilePage() {
                     textTransform: "capitalize",
                   }}
                 >
-                  {String(profile?.role ?? "borrower")}
+                  {String(user.role ?? "borrower")}
                 </span>
               </li>
               <li>
@@ -368,7 +363,7 @@ export default async function BorrowerProfilePage() {
                     alignItems: "center",
                     gap: "0.4rem",
                     fontSize: "0.8rem",
-                    color: user.email_confirmed_at ? "#16a07a" : "#d97706",
+                    color: user.email ? "#16a07a" : "#d97706",
                     fontWeight: 600,
                   }}
                 >
@@ -377,18 +372,18 @@ export default async function BorrowerProfilePage() {
                       width: "7px",
                       height: "7px",
                       borderRadius: "50%",
-                      background: user.email_confirmed_at ? "#22cf9d" : "#f59e0b",
+                      background: user.email ? "#22cf9d" : "#f59e0b",
                       display: "inline-block",
                     }}
                   />
-                  {user.email_confirmed_at ? "Verified" : "Not verified"}
+                  {user.email ? "Verified" : "Not verified"}
                 </span>
               </li>
               <li>
                 <span>Member Since</span>
                 <strong style={{ fontSize: "0.82rem" }}>
-                  {user.created_at
-                    ? new Date(user.created_at).toLocaleDateString("en-US", {
+                  {user.createdAt
+                    ? new Date(user.createdAt).toLocaleDateString("en-US", {
                         month: "long",
                         year: "numeric",
                       })
