@@ -32,7 +32,7 @@ interface ProfileRow {
  *
  * This endpoint replaces the previous 503 stub.
  */
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   try {
     const { user } = await requireAuthenticatedUser();
 

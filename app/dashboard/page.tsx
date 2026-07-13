@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import prisma from "@/lib/prisma";
 import { ArrowRight, Lock, TrendingUp, CreditCard, Wallet, LogOut } from "lucide-react";
@@ -51,15 +50,16 @@ export default async function UnifiedDashboardPage() {
             display: "flex", alignItems: "center", justifyContent: "center",
             padding: "3px"
           }}>
-            <img src="/logo.png" alt="Kredex" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Kredex" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           </div>
           <span className="font-display" style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-primary)" }}>Kredex</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <span className="wallet-address">{walletShort}</span>
-          <Link href="/api/auth/signout" className="btn btn-ghost btn-sm" style={{ color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+          <a href="/api/auth/signout" className="btn btn-ghost btn-sm" style={{ color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "0.4rem" }}>
             <LogOut size={14} /> Sign out
-          </Link>
+          </a>
         </div>
       </header>
 

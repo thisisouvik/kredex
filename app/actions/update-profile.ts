@@ -38,7 +38,7 @@ export async function updateUserProfile(
       return { success: false, error: "Please enter a valid phone number." };
     }
 
-    const updates: any = {
+    const updates: import("@prisma/client").Prisma.UserUpdateInput = {
       fullName: name,
       phone: phone,
     };

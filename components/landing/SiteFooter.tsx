@@ -20,7 +20,8 @@ export function SiteFooter({ links }: SiteFooterProps) {
                   boxShadow: "0 4px 14px rgba(99,102,241,0.25)"
                 }}
               >
-                <img src="/logo.png" alt="Kredex Logo" style={{ width: 24, height: 24, objectFit: 'contain' }} />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Kredex Logo" style={{ width: 24, height: 24, objectFit: 'contain' }} />
               </div>
               <h2 className="font-display site-footer-brand" style={{ margin: 0 }}>Kredex</h2>
             </div>

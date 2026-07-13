@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
   Loader2, Smartphone, Monitor,
   Wallet, ChevronRight} from "lucide-react";

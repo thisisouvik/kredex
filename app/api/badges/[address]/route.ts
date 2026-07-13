@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBadge, hasBadge, BADGE_METADATA } from "@/lib/contracts/nft";
+import { getBadge, BADGE_METADATA } from "@/lib/contracts/nft";
 import { withCache } from "@/lib/redis/cache";
 
 const CORS = {

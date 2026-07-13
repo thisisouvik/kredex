@@ -33,7 +33,7 @@ export default async function BorrowerHistoryPage() {
   const loanTxMap: Record<string, { hash: string; amount: number; date: string }> = {};
   for (const entry of fundLedgers) {
     try {
-      const meta = JSON.parse(String(entry.metadata ?? "{}")) as any;
+      const meta = JSON.parse(String(entry.metadata ?? "{}")) as Record<string, unknown>;
       if (entry.refId) {
         loanTxMap[entry.refId] = {
           hash: String(meta.txHash ?? ""),
@@ -51,7 +51,7 @@ export default async function BorrowerHistoryPage() {
   for (const t of repayLedgers) {
     if (!loanIds.includes(t.refId || "")) continue;
     try {
-      const meta = JSON.parse(String(t.metadata ?? "{}")) as any;
+      const meta = JSON.parse(String(t.metadata ?? "{}")) as Record<string, unknown>;
       if (meta.txHash) repayTxMap[t.refId!] = String(meta.txHash);
     } catch { /* ignore */ }
   }

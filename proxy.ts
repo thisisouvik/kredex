@@ -1,6 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { getDashboardPath, normalizeUserRole } from "@/lib/auth/roles";
 
 // ── In-memory rate limiter (resets on server restart) ─────────────────────────
 // For production, replace with Redis/Upstash for persistence across instances.

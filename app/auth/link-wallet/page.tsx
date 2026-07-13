@@ -1,4 +1,3 @@
-import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { LinkWalletClient } from "@/components/auth/LinkWalletClient";
 import { getServerSupabaseClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";

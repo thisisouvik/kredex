@@ -7,7 +7,6 @@ import {
   presentBorrowerMetrics,
 } from "@/lib/dashboard/metrics";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
-import { getServiceRoleClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
 

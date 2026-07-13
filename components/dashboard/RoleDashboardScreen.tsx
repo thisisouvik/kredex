@@ -35,7 +35,7 @@ export function RoleDashboardScreen({
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [walletDisplay, setWalletDisplay] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const { showAlert } = useAlert();
 
   useEffect(() => {

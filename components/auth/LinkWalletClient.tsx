@@ -6,8 +6,7 @@ import { Monitor, ShieldCheck, AlertTriangle } from "lucide-react";
 import { isConnected, setAllowed, getAddress } from "@stellar/freighter-api";
 
 export function LinkWalletClient({ userId }: { userId: string }) {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   const handleLinkFreighter = async () => {

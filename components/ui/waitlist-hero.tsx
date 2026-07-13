@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Image from "next/image"
 import { getBrowserSupabaseClient } from "@/lib/supabase/client"
-import { ArrowRight, User, Mail, Globe, CheckCircle2, Loader2 } from "lucide-react"
+import { ArrowRight, User, Mail, CheckCircle2, Loader2 } from "lucide-react"
 
 export const WaitlistHero = () => {
   const [fullName, setFullName] = useState("")

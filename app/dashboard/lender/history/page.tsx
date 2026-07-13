@@ -31,7 +31,7 @@ export default async function LenderHistoryPage() {
 
   const incomingRepays = allRepays.filter(tx => {
      try {
-       const meta = JSON.parse(String(tx.metadata || "{}")) as any;
+       const meta = JSON.parse(String(tx.metadata || "{}")) as Record<string, unknown>;
        return String(meta.lenderUserId) === String(user.id) || String(meta.lenderAddress) === String(user.id);
      } catch { return false; }
   });

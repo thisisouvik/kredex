@@ -29,7 +29,7 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
           create: { id: bypassUserId, walletAddress: "GBYPASSADDRESS0000000000000000000000000000000000000000000", role: bypassRole, fullName: `Dev Bypass ${bypassRole}` },
           update: { role: bypassRole }
         });
-      } catch (e) {
+      } catch (_e) {
         // Ignore errors, might be read-only or offline
       }
 

@@ -69,8 +69,9 @@ export async function uploadKYCDocument(formData: FormData): Promise<{
     });
 
     return { success: true, path: uploadResult.url };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("KYC upload error:", error);
-    return { success: false, error: error.message || "Failed to upload KYC document." };
+    const errorMessage = error instanceof Error ? error.message : "Failed to upload KYC document.";
+    return { success: false, error: errorMessage };
   }
 }
