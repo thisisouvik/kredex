@@ -1,32 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import prisma from "@/lib/prisma";
 import {
   batchDisburse,
   writeDisbursementAudit,
   type DisbursementItem,
 } from "@/lib/stellar/batch-disburse";
 
-/**
- * POST /api/admin/disburse
- *
- * Admin-only batch payout endpoint.
- * Disburses XLM to up to 500 borrowers in chunked Stellar transactions.
- *
- * Body: { loanIds: string[] }
- *
- * Flow:
- *   1. Load APPROVED loans by ID from Supabase
- *   2. Build DisbursementItem[] from loan data
- *   3. Run batchDisburse() — chunks into groups of 100, submits, retries
- *   4. Write audit trail per batch
- *   5. Update loan statuses to FUNDED on success
- */
 export async function POST(req: NextRequest) {
   try {
-    const { user } = await requireAuthenticatedUser();
+    const session = await getAuthenticatedUser();
+    if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const user = session.user;
 
-    // Verify the user has admin wallet (check against env var)
     const adminAddress = process.env.ADMIN_WALLET_ADDRESS;
     if (!adminAddress || user.wallet !== adminAddress) {
       return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
@@ -42,21 +28,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Maximum 500 loans per batch" }, { status: 400 });
     }
 
-    const srClient = getServiceRoleClient();
-    if (!srClient) {
-      return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-    }
-
     // ── 1. Fetch loan data ───────────────────────────────────────────────────
-    const { data: loans, error: fetchErr } = await srClient
-      .from("loans")
-      .select("id, status, principal_amount, borrower_id, profiles:borrower_id(wallet_address, full_name)")
-      .in("id", loanIds)
-      .eq("status", "approved"); // Only disburse approved loans
-
-    if (fetchErr) {
-      return NextResponse.json({ error: "Failed to fetch loans" }, { status: 500 });
-    }
+    const loans = await prisma.loan.findMany({
+      where: {
+        id: { in: loanIds },
+        status: "approved"
+      },
+      include: {
+        borrower: {
+          select: { walletAddress: true, fullName: true }
+        }
+      }
+    });
 
     if (!loans || loans.length === 0) {
       return NextResponse.json(
@@ -70,8 +53,7 @@ export async function POST(req: NextRequest) {
     const skipped: string[] = [];
 
     for (const loan of loans) {
-      const profile = Array.isArray(loan.profiles) ? loan.profiles[0] : loan.profiles;
-      const borrowerAddress = (profile as { wallet_address?: string })?.wallet_address;
+      const borrowerAddress = loan.borrower?.walletAddress;
 
       if (!borrowerAddress) {
         skipped.push(String(loan.id));
@@ -79,7 +61,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Convert from stroops (bigint) to XLM
-      const amountXlm = Number(loan.principal_amount) / 10_000_000;
+      const amountXlm = Number(loan.principalAmount) / 10_000_000;
 
       if (amountXlm <= 0) {
         skipped.push(String(loan.id));
@@ -109,7 +91,7 @@ export async function POST(req: NextRequest) {
 
     // ── 4. Write audit trail ─────────────────────────────────────────────────
     for (const batch of result.batches) {
-      await writeDisbursementAudit(batch, srClient);
+      await writeDisbursementAudit(batch);
     }
 
     // ── 5. Update loan statuses for successful batches ───────────────────────
@@ -126,10 +108,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (successfulLoanIds.length > 0) {
-      await srClient
-        .from("loans")
-        .update({ status: "funded" })
-        .in("id", successfulLoanIds);
+      await prisma.loan.updateMany({
+        where: { id: { in: successfulLoanIds } },
+        data: { status: "funded", updatedAt: new Date() }
+      });
     }
 
     // ── 6. Return summary ────────────────────────────────────────────────────
@@ -167,32 +149,37 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const { user } = await requireAuthenticatedUser();
-    const adminAddress = process.env.NEXT_PUBLIC_ADMIN_ADDRESS;
+    const session = await getAuthenticatedUser();
+    if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const user = session.user;
+
+    const adminAddress = process.env.ADMIN_WALLET_ADDRESS;
     if (!adminAddress || user.wallet !== adminAddress) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const srClient = getServiceRoleClient();
-    if (!srClient) {
-      return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
     }
 
     const url = new URL(req.url);
     const limit = Math.min(Number(url.searchParams.get("limit") ?? "50"), 200);
 
-    const { data, error } = await srClient
-      .from("disbursement_audit")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(limit);
+    const records = await prisma.ledgerTransaction.findMany({
+      where: { refType: "loan_disburse" },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: {
+        loan: {
+          select: { id: true }
+        }
+      }
+    });
 
-    if (error) {
-      return NextResponse.json({ error: "Failed to fetch audit log" }, { status: 500 });
-    }
+    // Map safely for JSON serialization
+    const safeRecords = records.map(r => ({
+      ...r,
+      amount: r.amount.toString(),
+    }));
 
-    return NextResponse.json({ records: data ?? [] });
-  } catch {
+    return NextResponse.json({ records: safeRecords });
+  } catch (_err) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 }

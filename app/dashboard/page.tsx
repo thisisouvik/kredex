@@ -1,6 +1,6 @@
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import prisma from "@/lib/prisma";
-import { ArrowRight, Lock, TrendingUp, CreditCard, Wallet, LogOut } from "lucide-react";
+import { ArrowRight, Lock, TrendingUp, CreditCard, LogOut } from "lucide-react";
 import Link from "next/link";
 
 export default async function UnifiedDashboardPage() {

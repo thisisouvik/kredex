@@ -27,7 +27,7 @@ export default async function LenderHomePage() {
       where: { userId: user.id, refType: "loan_fund" },
       orderBy: { createdAt: "desc" },
       take: 20,
-      select: { id: true, refId: true, amount: true, status: true, metadata: true, createdAt: true },
+      select: { id: true, refId: true, amount: true, status: true, txHash: true, createdAt: true },
     }).catch(() => []),
     prisma.loan.count({
       where: { status: { in: ["requested", "approved"] } },
@@ -83,6 +83,7 @@ export default async function LenderHomePage() {
       currentPath="/dashboard/lender"
       profilePath="/dashboard/lender/profile"
       showProfileAlert={false}
+      kycStatus={profile?.kycStatus}
       links={lenderNavLinks}
     >
       <div className="workspace-stack">
@@ -228,11 +229,7 @@ export default async function LenderHomePage() {
                   </thead>
                   <tbody>
                     {p2pInvestments.map((tx) => {
-                       let fundTxHash = "";
-                       try {
-                         const meta = JSON.parse(String(tx.metadata || "{}"));
-                         fundTxHash = meta.txHash ?? "";
-                       } catch {}
+                       const fundTxHash = tx.txHash ?? "";
 
                        // Find actual loan data
                        const actualLoan = loanMap[String(tx.refId)];

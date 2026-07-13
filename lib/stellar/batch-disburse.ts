@@ -18,6 +18,7 @@ import {
   BASE_FEE,
   Account,
 } from "@stellar/stellar-sdk";
+import prisma from "@/lib/prisma";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -204,30 +205,38 @@ async function buildAndSubmitBatch(
 
 // ─── Audit trail writer ───────────────────────────────────────────────────────
 
-/**
- * Writes audit records to Supabase for each item in a batch result.
- * Call this after submitBatch resolves — success or failure.
- */
 export async function writeDisbursementAudit(
-  result: BatchResult,
-  // Accept any Supabase-like client without pulling in the Supabase type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabaseServiceClient: any
+  result: BatchResult
 ): Promise<void> {
-  const rows = result.items.map((item) => ({
-    loan_id: item.loanId,
-    borrower_address: item.borrowerAddress,
-    amount_xlm: item.amountXlm,
-    batch_index: result.batchIndex,
-    tx_hash: result.txHash,
-    status: result.status,
-    error_message: result.error ?? null,
-    attempted_at: new Date().toISOString(),
+  const _adminAddress = process.env.ADMIN_WALLET_ADDRESS ?? "ADMIN";
+  
+  // Find admin user ID to associate with the ledger transactions
+  const adminUser = await prisma.user.findFirst({
+    where: { role: "admin" }
+  });
+
+  const userId = adminUser?.id ?? "unknown";
+
+  const data = result.items.map((item) => ({
+    userId: userId,
+    loanId: item.loanId,
+    amount: BigInt(Math.floor(item.amountXlm * 10_000_000)), // Convert XLM to stroops
+    status: result.status === "success" ? "confirmed" : "failed",
+    refType: "loan_disburse",
+    txHash: result.txHash ?? "",
+    metadata: {
+      borrowerAddress: item.borrowerAddress,
+      batchIndex: result.batchIndex,
+      error: result.error ?? null,
+      attemptedAt: new Date().toISOString()
+    }
   }));
 
-  const { error } = await supabaseServiceClient.from("disbursement_audit").insert(rows);
-
-  if (error) {
+  try {
+    await prisma.ledgerTransaction.createMany({
+      data,
+    });
+  } catch (error) {
     console.error("[BatchDisburse] Failed to write audit records:", error);
   }
 }

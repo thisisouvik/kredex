@@ -106,14 +106,12 @@ export async function POST(request: NextRequest) {
       userId: loan.borrowerId,
       title: "Loan Funded!",
       message: `Great news! A lender has funded your loan of ${loan.principalAmount} XLM. The funds have been sent to your wallet.`,
-      type: "loan_funded",
     });
     // Notify Lender
     await createNotification({
       userId: user.id,
       title: "Funding Successful",
       message: `You successfully funded a ${loan.principalAmount} XLM loan. View 'Loans You Funded' for details.`,
-      type: "investment_made",
     });
 
     return NextResponse.json(

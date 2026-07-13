@@ -1,52 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { requireAuthenticatedUser } from "@/lib/auth/session";
+import prisma from "@/lib/prisma";
 
-/**
- * POST /api/tasks/complete
- * Marks a platform task as completed and awards trust score points.
- *
- * Body: { taskId: string }
- */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getServerSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const { user } = await requireAuthenticatedUser();
 
     const { taskId } = await request.json() as { taskId: string };
     if (!taskId) {
       return NextResponse.json({ error: "taskId is required" }, { status: 400 });
     }
 
-    // Find the platform task definition
     const PLATFORM_TASKS = getPlatformTasks();
     const task = PLATFORM_TASKS.find((t) => t.id === taskId);
     if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const { data: awardedPoints, error: rpcErr } = await supabase.rpc("complete_platform_task", {
-      p_task_id: taskId,
+    // Check if task already completed by using notifications table as a log
+    const existing = await prisma.notification.findFirst({
+      where: {
+        userId: user.id,
+        title: taskId // Storing task ID in title for uniqueness check
+      }
     });
 
-    if (rpcErr) {
-      const message = rpcErr.message || "Failed to complete task.";
-      const status = /already completed/i.test(message) ? 409 : 500;
-      return NextResponse.json({ error: message }, { status });
+    if (existing) {
+      return NextResponse.json({ error: "Task already completed" }, { status: 409 });
     }
 
-    const pointsAwarded = Number(awardedPoints ?? task.points);
+    // Log completion
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        title: taskId,
+        message: `Completed task: ${task.title}`,
+        read: true,
+      }
+    });
+
+    // Award points
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        reputationScore: { increment: task.points }
+      }
+    });
 
     return NextResponse.json({
       taskId,
-      pointsAwarded,
-      message: `+${pointsAwarded} trust points awarded for completing "${task.title}"`,
+      pointsAwarded: task.points,
+      message: `+${task.points} trust points awarded for completing "${task.title}"`,
     });
   } catch (err) {
     console.error("Task complete error:", err);
@@ -79,7 +83,7 @@ export function getPlatformTasks() {
       points:     25,
       difficulty: "Easy",
       cta:        "I've Read This",
-      learnUrl:   null, // inline content shown in UI
+      learnUrl:   null,
     },
     {
       id:         "task_defi_lending",

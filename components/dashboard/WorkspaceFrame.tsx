@@ -35,6 +35,7 @@ interface WorkspaceFrameProps {
   currentPath?: string;
   profilePath?: string;
   profileSummary?: ProfileSummary;
+  kycStatus?: string; // "verified" | "submitted" | "pending" | "rejected" | null
   headerWidget?: React.ReactNode;
   showProfileAlert?: boolean;
   children?: React.ReactNode;
@@ -64,6 +65,7 @@ export function WorkspaceFrame({
   currentPath,
   profilePath,
   profileSummary,
+  kycStatus,
   headerWidget,
   showProfileAlert = true,
   children,
@@ -129,7 +131,25 @@ export function WorkspaceFrame({
               })}
             </nav>
 
-            {/* KYC / Profile Alert */}
+          {/* KYC Status Block (Bottom Left) */}
+          {kycStatus && kycStatus !== "verified" && (
+            <div style={{ marginTop: "auto", marginBottom: "1rem", padding: "1rem", background: "rgba(245,166,35,0.05)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
+                <Shield size={16} color="#f5a623" />
+                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f5a623" }}>KYC {kycStatus.charAt(0).toUpperCase() + kycStatus.slice(1)}</span>
+              </div>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: 0, lineHeight: 1.4 }}>
+                {kycStatus === "submitted" 
+                  ? "Your documents are under review."
+                  : "Complete KYC to unlock full features."}
+              </p>
+              <Link href={resolvedProfilePath} style={{ display: "inline-block", marginTop: "0.5rem", fontSize: "0.75rem", color: "#f5a623", textDecoration: "underline", fontWeight: 600 }}>
+                View Status
+              </Link>
+            </div>
+          )}
+
+          {/* KYC / Profile Alert */}
             {showProfileAlert && resolvedProfileSummary ? (
               <section className="premium-alert" aria-live="polite">
                 <p className="premium-alert-badge">Action Required</p>

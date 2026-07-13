@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 export async function POST(request: NextRequest) {
   try {
     const { user } = await requireAuthenticatedUser("borrower");
-    const supabase = getServiceRoleClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-    }
 
     // ── Parse body ──────────────────────────────────────────────────────────
     const body = await request.json();
@@ -28,14 +24,19 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 1. Anti-scam: only ONE active loan at a time ─────────────────────────
-    const { data: existingLoans } = await supabase
-      .from("loans")
-      .select("id, status")
-      .eq("borrower_id", user.id)
-      .not("status", "in", '("repaid","defaulted","cancelled")')
-      .limit(1);
+    const existingLoans = await prisma.loan.findMany({
+      where: {
+        borrowerId: user.id,
+        NOT: {
+          status: {
+            in: ["repaid", "defaulted", "cancelled"],
+          },
+        },
+      },
+      take: 1,
+    });
 
-    if (existingLoans && existingLoans.length > 0) {
+    if (existingLoans.length > 0) {
       return NextResponse.json(
         {
           error:
@@ -46,28 +47,20 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 2. Reputation / credit limit check & Silver Tier ──────────────────────
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("kyc_status")
-      .eq("id", user.id)
-      .maybeSingle();
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { kycStatus: true, reputationScore: true },
+    });
 
-    const isKycVerified = profile?.kyc_status === "verified";
-
-    const { data: reputation } = await supabase
-      .from("reputation_snapshots")
-      .select("score_total")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const reputationScore: number = reputation?.score_total ?? 250;
+    const isKycVerified = dbUser?.kycStatus === "verified";
+    const reputationScore: number = dbUser?.reputationScore ?? 250;
     
     // Default max loan based on reputation
-    let maxLoan = reputationScore * 10;
+    let maxLoan = (reputationScore === 0 ? 250 : reputationScore) * 10;
     
     // SILVER TIER ENFORCEMENT: Unverified users can only borrow up to 100 XLM
     if (!isKycVerified) {
-      maxLoan = Math.min(maxLoan, 100); // hard cap at 100 XLM for test tier
+      maxLoan = 100; // hard cap at 100 XLM for test tier
     }
 
     if (amount > maxLoan) {
@@ -84,66 +77,40 @@ export async function POST(request: NextRequest) {
     else if (amount > 1000) aprBps = 1200;  // 12%
 
     // ── 4. Try to auto-assign a pool with enough liquidity ───────────────────
-    // This is optional — loan is still created without a pool (direct P2P path)
-    const { data: availablePools } = await supabase
-      .from("lending_pools")
-      .select("id, available_liquidity")
-      .eq("status", "active")
-      .gte("available_liquidity", amount)
-      .order("available_liquidity", { ascending: false })
-      .limit(1);
-
-    const poolId = availablePools && availablePools.length > 0
-      ? availablePools[0].id
-      : null; // loan will be funded directly by a lender
+    const poolId = null; // loan will be funded directly by a lender
 
     // ── 5. Create the loan ───────────────────────────────────────────────────
-    const { data: loan, error: loanError } = await supabase
-      .from("loans")
-      .insert({
-        borrower_id: user.id,
-        ...(poolId ? { pool_id: poolId } : {}),
-        principal_amount: amount,
-        apr_bps: aprBps,
-        duration_days: Number(durationDays),
-        status: "requested",
-      })
-      .select()
-      .single();
-
-    if (loanError) {
-      return NextResponse.json({ error: loanError.message }, { status: 500 });
-    }
-
-    // ── 6. Record request in ledger for traceability ────────────────────────
-    const { error: ledgerError } = await supabase
-      .from("ledger_transactions")
-      .insert({
-        user_id: user.id,
-        category: "loan_request",
-        amount: Number(amount),
-        currency: "XLM",
-        status: "confirmed",
-        ref_type: "loan_request",
-        ref_id: String(loan.id),
-        metadata: {
-          stage: "requested",
-          loanId: String(loan.id),
-          durationDays: Number(durationDays),
+    const loan = await prisma.$transaction(async (tx) => {
+      const createdLoan = await tx.loan.create({
+        data: {
+          borrowerId: user.id,
+          principalAmount: BigInt(Math.floor(amount)),
           aprBps,
-          fundingPath: poolId ? "pool" : "direct",
-        },
+          durationDays: Number(durationDays),
+          status: "requested",
+        }
       });
 
-    if (ledgerError) {
-      // Roll back the just-created loan to keep invariants strict: every request must have a ledger entry.
-      await supabase
-        .from("loans")
-        .delete()
-        .eq("id", String(loan.id))
-        .eq("borrower_id", user.id);
-      return NextResponse.json({ error: `Failed to record transaction trail: ${ledgerError.message}` }, { status: 500 });
-    }
+      // ── 6. Record request in ledger for traceability ────────────────────────
+      await tx.ledgerTransaction.create({
+        data: {
+          userId: user.id,
+          amount: BigInt(Math.floor(amount)),
+          status: "confirmed",
+          refType: "loan_request",
+          refId: createdLoan.id,
+          metadata: JSON.stringify({
+            stage: "requested",
+            loanId: createdLoan.id,
+            durationDays: Number(durationDays),
+            aprBps,
+            fundingPath: poolId ? "pool" : "direct",
+          }),
+        }
+      });
+
+      return createdLoan;
+    });
 
     // ── Emit notification ──
     const { createNotification } = await import("@/lib/notifications");
@@ -151,12 +118,17 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       title: "Loan Request Submitted",
       message: `Your request for ${amount} XLM is now live in the marketplace and waiting for lender funding.`,
-      type: "loan_requested",
     });
 
     return NextResponse.json(
       {
-        loan,
+        loan: {
+          ...loan,
+          principalAmount: Number(loan.principalAmount),
+          totalDue: Number(loan.totalDue),
+          remainingDue: Number(loan.remainingDue),
+          repaidAmount: Number(loan.repaidAmount),
+        },
         fundingPath: poolId ? "pool" : "direct",
         message: poolId
           ? "Your loan request has been submitted. A lending pool has been assigned — it will be processed shortly."

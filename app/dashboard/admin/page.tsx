@@ -6,9 +6,10 @@ import {
   getAdminDashboardMetrics,
   presentAdminMetrics,
 } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import Link from "next/link";
 import { Users, TrendingUp, Activity } from "lucide-react";
+
 function formatAmount(value: number) {
   return `${value.toFixed(2)} XLM`;
 }
@@ -23,59 +24,42 @@ function sumByPeriod(
 }
 
 export default async function AdminDashboardPage() {
-  const { user } = await requireTradeVaultAdmin();
+  const session = await requireTradeVaultAdmin();
+  const user = session.user;
   const metrics = await getAdminDashboardMetrics();
-  const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
+  const walletAddress = user.wallet || null;
   const walletConnected = Boolean(walletAddress);
   
-  // Use service role client to bypass RLS and view platform-wide aggregates
-  const srClient = getServiceRoleClient();
+  const [profiles, loans, repayments, ledgerRows, pools] = await Promise.all([
+    prisma.user.findMany({
+      select: { id: true, role: true, kycStatus: true, riskStatus: true, fullName: true, phone: true, countryCode: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 10
+    }),
+    prisma.loan.findMany({
+      select: { id: true, borrowerId: true, status: true, principalAmount: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 10
+    }),
+    prisma.ledgerTransaction.findMany({
+      where: { refType: "loan_repay" },
+      select: { id: true, userId: true, amount: true, createdAt: true, txHash: true },
+      orderBy: { createdAt: "desc" },
+      take: 120
+    }),
+    prisma.ledgerTransaction.findMany({
+      select: { id: true, userId: true, amount: true, refType: true, status: true, createdAt: true, metadata: true },
+      orderBy: { createdAt: "desc" },
+      take: 400
+    }),
+    prisma.pool.findMany({
+      select: { id: true, name: true, status: true, totalLiquidity: true, apy: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 10
+    })
+  ]);
 
-  const [profilesRes, loansRes, repaymentsRes, ledgerRes, fraudRes, poolsRes] = srClient
-    ? await Promise.all([
-        srClient
-          .from("profiles")
-          .select("id, role, kyc_status, risk_status, full_name, phone, country_code, created_at")
-          .order("created_at", { ascending: false })
-          .limit(10),
-        srClient
-          .from("loans")
-          .select("id, borrower_id, status, principal_amount, requested_at")
-          .order("requested_at", { ascending: false })
-          .limit(10),
-        srClient
-          .from("loan_repayments")
-          .select("id, payer_id, amount, paid_at, tx_ref")
-          .order("paid_at", { ascending: false })
-          .limit(120),
-        srClient
-          .from("ledger_transactions")
-          .select("id, user_id, amount, category, status, created_at, metadata")
-          .order("created_at", { ascending: false })
-          .limit(400),
-        srClient
-          .from("fraud_signals")
-          .select("id, user_id, signal_type, severity, resolved, created_at")
-          .order("created_at", { ascending: false })
-          .limit(120),
-        srClient
-          .from("lending_pools")
-          .select("id, name, status, total_liquidity, apr_bps, created_at")
-          .order("created_at", { ascending: false })
-          .limit(10)
-      ])
-    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
-
-  const profiles = profilesRes.data ?? [];
-  const loans = loansRes.data ?? [];
-  const repayments = repaymentsRes.data ?? [];
-  const ledgerRows = ledgerRes.data ?? [];
-  const fraudSignals = fraudRes.data ?? [];
-  const pools = poolsRes.data ?? [];
-
-  const anchorTime = new Date(
-    String(ledgerRows[0]?.created_at ?? user.last_sign_in_at ?? user.created_at),
-  ).getTime();
+  const anchorTime = new Date().getTime();
   const baseTime = Number.isFinite(anchorTime) ? anchorTime : 0;
   const baseDate = new Date(baseTime);
   const dayStartDate = new Date(baseDate);
@@ -87,8 +71,8 @@ export default async function AdminDashboardPage() {
   const activeWindowStart = baseTime - 15 * 60 * 1000;
 
   const ledgerAmounts = ledgerRows.map((row) => ({
-    amount: Number(row.amount ?? 0),
-    createdAt: String(row.created_at ?? ""),
+    amount: Number(row.amount) / 10_000_000,
+    createdAt: row.createdAt.toISOString(),
   }));
 
   const txToday = sumByPeriod(ledgerAmounts, todayStart);
@@ -97,48 +81,27 @@ export default async function AdminDashboardPage() {
   const txAllTime = ledgerAmounts.reduce((sum, row) => sum + row.amount, 0);
 
   const sanctionedLoans = loans.filter((loan) =>
-    ["approved", "funded", "active", "repaid", "defaulted"].includes(String(loan.status).toLowerCase()),
+    ["approved", "funded", "active", "repaid", "defaulted"].includes(loan.status.toLowerCase()),
   );
-  const sanctionedAmount = sanctionedLoans.reduce((sum, loan) => sum + Number(loan.principal_amount ?? 0), 0);
-  const repaidAmount = repayments.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+  const sanctionedAmount = sanctionedLoans.reduce((sum, loan) => sum + (Number(loan.principalAmount) / 10_000_000), 0);
+  const repaidAmount = repayments.reduce((sum, row) => sum + (Number(row.amount) / 10_000_000), 0);
 
-  const lendersCount = profiles.filter((profile) => String(profile.role) === "lender").length;
-  const borrowersCount = profiles.filter((profile) => String(profile.role) === "borrower").length;
+  const lendersCount = await prisma.user.count({ where: { role: "lender" }});
+  const borrowersCount = await prisma.user.count({ where: { role: "borrower" }});
+  
   const activeUsers = new Set(
     ledgerRows
-      .filter((row) => new Date(String(row.created_at)).getTime() >= activeWindowStart)
-      .map((row) => String(row.user_id)),
+      .filter((row) => new Date(row.createdAt).getTime() >= activeWindowStart)
+      .map((row) => row.userId),
   ).size;
-
-  const maliciousUserIds = new Set(
-    fraudSignals
-      .filter((signal) => !signal.resolved && Number(signal.severity ?? 0) >= 4)
-      .map((signal) => String(signal.user_id)),
-  );
-
-  const blockedUserIds = profiles
-    .filter((profile) => ["high", "blocked"].includes(String(profile.risk_status)))
-    .map((profile) => String(profile.id));
-
-  blockedUserIds.forEach((id) => maliciousUserIds.add(id));
-
-  const topUsersMap = new Map<string, number>();
-  for (const row of ledgerRows) {
-    const userId = String(row.user_id ?? "");
-    const amount = Number(row.amount ?? 0);
-    if (!userId) {
-      continue;
-    }
-    topUsersMap.set(userId, (topUsersMap.get(userId) ?? 0) + amount);
-  }
 
   return (
     <WorkspaceFrame
       roleLabel="Trade Vault Admin"
       heading="Control Panel"
       description="Monitor platform health, credit activity, and security posture across Kredex operations."
-      email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? "Admin")}
+      email={null}
+      userName={user.user_metadata?.full_name || "Admin"}
       metrics={presentAdminMetrics(metrics)}
       links={[...adminNavLinks]}
       currentPath="/dashboard/admin"
@@ -173,7 +136,7 @@ export default async function AdminDashboardPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Total Users</p>
-                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{profiles.length}</p>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{lendersCount + borrowersCount}</p>
                   </div>
                   <div>
                     <p style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Active Now</p>
@@ -260,22 +223,22 @@ export default async function AdminDashboardPage() {
                     <tbody>
                       {profiles.length === 0 ? (
                         <tr><td colSpan={6} style={{ textAlign: "center", padding: "1.5rem", opacity: 0.5 }}>No users found.</td></tr>
-                      ) : profiles.slice(0, 1).map((p) => (
-                        <tr key={String(p.id)}>
-                          <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{String(p.id).slice(0,8)}</td>
-                          <td><span style={{ textTransform: "capitalize", fontWeight: 600 }}>{String(p.role)}</span></td>
-                          <td>{String(p.full_name || "Unknown")}</td>
+                      ) : profiles.slice(0, 10).map((p) => (
+                        <tr key={p.id}>
+                          <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{p.id.slice(0,8)}</td>
+                          <td><span style={{ textTransform: "capitalize", fontWeight: 600 }}>{p.role}</span></td>
+                          <td>{p.fullName || "Unknown"}</td>
                           <td>
-                            <span style={{ padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, background: p.kyc_status === "verified" ? "rgba(34,207,157,0.12)" : "rgba(245,166,35,0.12)", color: p.kyc_status === "verified" ? "#22cf9d" : "#f5a623" }}>
-                              {String(p.kyc_status).toUpperCase()}
+                            <span style={{ padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, background: p.kycStatus === "verified" ? "rgba(34,207,157,0.12)" : "rgba(245,166,35,0.12)", color: p.kycStatus === "verified" ? "#22cf9d" : "#f5a623" }}>
+                              {p.kycStatus.toUpperCase()}
                             </span>
                           </td>
                           <td>
-                            <span style={{ padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, color: p.risk_status === "low" ? "#22cf9d" : p.risk_status === "blocked" ? "#ff6b6b" : "#f5a623", background: p.risk_status === "low" ? "rgba(34,207,157,0.12)" : p.risk_status === "blocked" ? "rgba(255,107,107,0.12)" : "rgba(245,166,35,0.12)" }}>
-                              {String(p.risk_status).toUpperCase()}
+                            <span style={{ padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, color: p.riskStatus === "low" ? "#22cf9d" : p.riskStatus === "blocked" ? "#ff6b6b" : "#f5a623", background: p.riskStatus === "low" ? "rgba(34,207,157,0.12)" : p.riskStatus === "blocked" ? "rgba(255,107,107,0.12)" : "rgba(245,166,35,0.12)" }}>
+                              {p.riskStatus.toUpperCase()}
                             </span>
                           </td>
-                          <td>{p.created_at ? new Date(String(p.created_at)).toLocaleDateString() : "-"}</td>
+                          <td>{p.createdAt ? p.createdAt.toLocaleDateString() : "-"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -301,13 +264,13 @@ export default async function AdminDashboardPage() {
                       {pools.length === 0 ? (
                         <tr><td colSpan={4} style={{ textAlign: "center", padding: "1.5rem", opacity: 0.5 }}>No pools found.</td></tr>
                       ) : pools.map((p) => (
-                        <tr key={String(p.id)}>
-                          <td style={{ fontWeight: 600 }}>{String(p.name)}</td>
-                          <td>{formatAmount(Number(p.total_liquidity ?? 0))}</td>
-                          <td style={{ color: "#22cf9d", fontWeight: "bold" }}>{(Number(p.apr_bps ?? 0) / 100).toFixed(2)}%</td>
+                        <tr key={p.id}>
+                          <td style={{ fontWeight: 600 }}>{p.name}</td>
+                          <td>{formatAmount(Number(p.totalLiquidity) / 10_000_000)}</td>
+                          <td style={{ color: "#22cf9d", fontWeight: "bold" }}>{(p.apy * 100).toFixed(2)}%</td>
                           <td>
                             <span style={{ padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, background: p.status === "active" ? "rgba(34,207,157,0.12)" : "rgba(100,100,100,0.12)", color: p.status === "active" ? "#22cf9d" : "inherit" }}>
-                              {String(p.status).toUpperCase()}
+                              {p.status.toUpperCase()}
                             </span>
                           </td>
                         </tr>
@@ -333,15 +296,15 @@ export default async function AdminDashboardPage() {
                       {loans.length === 0 ? (
                         <tr><td colSpan={4} style={{ textAlign: "center", padding: "1.5rem", opacity: 0.5 }}>No loans found.</td></tr>
                       ) : loans.map((l) => (
-                        <tr key={String(l.id)}>
-                          <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{String(l.id).slice(0,8)}</td>
-                          <td><strong>{formatAmount(Number(l.principal_amount ?? 0))}</strong></td>
+                        <tr key={l.id}>
+                          <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{l.id.slice(0,8)}</td>
+                          <td><strong>{formatAmount(Number(l.principalAmount) / 10_000_000)}</strong></td>
                           <td>
                             <span style={{ padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, background: l.status === "repaid" ? "rgba(155,111,224,0.12)" : "rgba(34,207,157,0.12)", color: l.status === "repaid" ? "#9b6fe0" : "#22cf9d" }}>
-                              {String(l.status).toUpperCase()}
+                              {l.status.toUpperCase()}
                             </span>
                           </td>
-                          <td style={{ fontFamily: "monospace", fontSize: "0.75rem", opacity: 0.8 }}>{String(l.borrower_id).slice(0,6)}...</td>
+                          <td style={{ fontFamily: "monospace", fontSize: "0.75rem", opacity: 0.8 }}>{l.borrowerId.slice(0,6)}...</td>
                         </tr>
                       ))}
                     </tbody>

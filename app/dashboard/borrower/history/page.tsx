@@ -21,22 +21,22 @@ export default async function BorrowerHistoryPage() {
 
   const loanIds = loans.map((l) => l.id);
 
-  const [fundLedgers, requestLedgers, repayments, repayLedgers] = loanIds.length > 0
+  const [fundLedgers, requestLedgers, repayLedgers] = loanIds.length > 0
     ? await Promise.all([
-        prisma.ledgerTransaction.findMany({ where: { refType: "loan_fund", refId: { in: loanIds } } }),
-        prisma.ledgerTransaction.findMany({ where: { refType: "loan_request", refId: { in: loanIds } } }),
-        prisma.payment.findMany({ where: { loanId: { in: loanIds } }, orderBy: { paidAt: "desc" }, take: 100 }),
-        prisma.ledgerTransaction.findMany({ where: { refType: "loan_repay" } }) // we'll filter this below by payment IDs or loan IDs
+        prisma.ledgerTransaction.findMany({ where: { refType: "loan_fund", OR: [{ refId: { in: loanIds } }, { loanId: { in: loanIds } }] } }),
+        prisma.ledgerTransaction.findMany({ where: { refType: "loan_request", OR: [{ refId: { in: loanIds } }, { loanId: { in: loanIds } }] } }),
+        prisma.ledgerTransaction.findMany({ where: { refType: "loan_repay", OR: [{ refId: { in: loanIds } }, { loanId: { in: loanIds } }] } })
       ])
-    : [[], [], [], []];
+    : [[], [], []];
 
   const loanTxMap: Record<string, { hash: string; amount: number; date: string }> = {};
   for (const entry of fundLedgers) {
     try {
-      const meta = JSON.parse(String(entry.metadata ?? "{}")) as Record<string, unknown>;
-      if (entry.refId) {
-        loanTxMap[entry.refId] = {
-          hash: String(meta.txHash ?? ""),
+      const meta = (typeof entry.metadata === "string" ? JSON.parse(entry.metadata) : (entry.metadata || {})) as Record<string, unknown>;
+      const targetId = entry.loanId || entry.refId;
+      if (targetId) {
+        loanTxMap[targetId] = {
+          hash: String(entry.txHash || meta.txHash || ""),
           amount: Number(entry.amount ?? 0),
           date: entry.createdAt.toISOString(),
         };
@@ -44,17 +44,7 @@ export default async function BorrowerHistoryPage() {
     } catch { /* ignore */ }
   }
 
-  // We map payments to their corresponding repay ledgers.
-  // Previously loan_repay refId matched the payment ID, or maybe the loan ID.
-  // In the new schema, we can map ledger to loan_id from metadata or refId.
-  const repayTxMap: Record<string, string> = {};
-  for (const t of repayLedgers) {
-    if (!loanIds.includes(t.refId || "")) continue;
-    try {
-      const meta = JSON.parse(String(t.metadata ?? "{}")) as Record<string, unknown>;
-      if (meta.txHash) repayTxMap[t.refId!] = String(meta.txHash);
-    } catch { /* ignore */ }
-  }
+
 
   // Build unified transaction feed
   interface TxEntry {
@@ -71,8 +61,9 @@ export default async function BorrowerHistoryPage() {
 
   const requestTxMap: Record<string, { date: string; amount: number }> = {};
   for (const entry of requestLedgers) {
-    if (!entry.refId) continue;
-    requestTxMap[entry.refId] = {
+    const targetId = entry.loanId || entry.refId;
+    if (!targetId) continue;
+    requestTxMap[targetId] = {
       date: entry.createdAt.toISOString(),
       amount: Number(entry.amount ?? 0),
     };
@@ -114,17 +105,23 @@ export default async function BorrowerHistoryPage() {
   }
 
   // Repayment events
-  for (const r of repayments) {
-    const loan = loans.find((l) => l.id === r.loanId);
-    const txHash = repayTxMap[r.id] ?? "";
+  for (const r of repayLedgers) {
+    const targetId = r.loanId || r.refId;
+    if (!targetId) continue;
+    const loan = loans.find((l) => l.id === targetId);
+    let txHash = r.txHash;
+    try {
+      const meta = (typeof r.metadata === "string" ? JSON.parse(r.metadata) : (r.metadata || {})) as Record<string, unknown>;
+      if (!txHash) txHash = String(meta.txHash || "");
+    } catch { /* ignore */ }
 
     transactions.push({
       id: `repay-${r.id}`,
       type: "repayment_made",
-      loanId: r.loanId,
+      loanId: targetId,
       amount: Number(r.amount),
-      date: r.paidAt.toISOString(),
-      txHash,
+      date: r.createdAt.toISOString(),
+      txHash: txHash ?? "",
       loanStatus: String(loan?.status ?? ""),
     });
   }

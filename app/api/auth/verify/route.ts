@@ -97,16 +97,27 @@ export async function POST(req: Request) {
         select: { id: true, role: true },
       });
 
+      const isAdminWallet = process.env.ADMIN_WALLET_ADDRESS && walletAddress === process.env.ADMIN_WALLET_ADDRESS;
+      const targetRole = isAdminWallet ? 'admin' : 'borrower';
+
       if (existing) {
         userUuid = existing.id;
         userRole = existing.role;
+        // Auto-upgrade to admin if the env var matches but db doesn't
+        if (isAdminWallet && userRole !== 'admin') {
+          await prisma.user.update({
+            where: { id: userUuid },
+            data: { role: 'admin' },
+          });
+          userRole = 'admin';
+        }
       } else {
         // First login — create a new user record
         const created = await prisma.user.create({
           data: {
             walletAddress,
-            role: 'borrower',
-            fullName: `Wallet User ${walletAddress.slice(0, 6)}`,
+            role: targetRole,
+            fullName: isAdminWallet ? 'System Admin' : `Wallet User ${walletAddress.slice(0, 6)}`,
           },
           select: { id: true, role: true },
         });

@@ -6,63 +6,45 @@ import {
   getAdminDashboardMetrics,
   presentAdminMetrics,
 } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
-import { buildStellarTxVerificationUrl, extractPossibleTxHash, isLikelyTxHash } from "@/lib/stellar/explorer";
+import prisma from "@/lib/prisma";
+import { buildStellarTxVerificationUrl, isLikelyTxHash } from "@/lib/stellar/explorer";
 
 function formatAmount(value: number) {
   return `${value.toFixed(2)} XLM`;
 }
 
 export default async function AdminLoansPage() {
-  const { user } = await requireTradeVaultAdmin();
+  const session = await requireTradeVaultAdmin();
+  const user = session.user;
   const metrics = await getAdminDashboardMetrics();
-  const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
+  const walletAddress = user.wallet || null;
   const walletConnected = Boolean(walletAddress);
 
-  const srClient = getServiceRoleClient();
-  const [loansRes, repaymentsRes, ledgerRepaysRes] = srClient
-    ? await Promise.all([
-        srClient
-          .from("loans")
-          .select("id, borrower_id, status, principal_amount, apr_bps, duration_days, due_at")
-          .order("requested_at", { ascending: false })
-          .limit(40),
-        srClient
-          .from("loan_repayments")
-          .select("id, loan_id, payer_id, amount, paid_at, tx_ref")
-          .order("paid_at", { ascending: false })
-          .limit(40),
-        srClient
-          .from("ledger_transactions")
-          .select("ref_id, metadata")
-          .eq("ref_type", "loan_repay")
-      ])
-    : [{ data: [] }, { data: [] }, { data: [] }];
+  const [loans, repayments] = await Promise.all([
+    prisma.loan.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 40
+    }),
+    prisma.ledgerTransaction.findMany({
+      where: { refType: "loan_repay" },
+      orderBy: { createdAt: "desc" },
+      take: 40
+    })
+  ]);
 
-  const loans = loansRes.data ?? [];
-  const repayments = repaymentsRes.data ?? [];
-  const oldHashesMap: Record<string, string> = {};
-  
-  if (ledgerRepaysRes?.data) {
-    for (const r of ledgerRepaysRes.data) {
-        const extracted = extractPossibleTxHash(r.metadata);
-        if (extracted) {
-           oldHashesMap[String(r.ref_id)] = extracted;
-        }
-    }
-  }
   const sanctionedAmount = loans
-    .filter((loan) => ["approved", "funded", "active", "repaid", "defaulted"].includes(String(loan.status)))
-    .reduce((sum, loan) => sum + Number(loan.principal_amount ?? 0), 0);
-  const paidAmount = repayments.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+    .filter((loan) => ["approved", "funded", "active", "repaid", "defaulted"].includes(loan.status))
+    .reduce((sum, loan) => sum + Number(loan.principalAmount) / 10_000_000, 0);
+    
+  const paidAmount = repayments.reduce((sum, row) => sum + Number(row.amount) / 10_000_000, 0);
 
   return (
     <WorkspaceFrame
       roleLabel="Trade Vault Admin"
       heading="Loan Operations"
       description="Monitor loan lifecycle, exposure, and maturity timelines across the platform."
-      email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? "Admin")}
+      email={null}
+      userName={user.user_metadata?.full_name || "Admin"}
       metrics={presentAdminMetrics(metrics)}
       links={[...adminNavLinks]}
       currentPath="/dashboard/admin/loans"
@@ -102,17 +84,17 @@ export default async function AdminLoansPage() {
                   {loans.length === 0 ? (
                     <tr><td colSpan={6} style={{ textAlign: "center", padding: "1.5rem", opacity: 0.5 }}>No loans found.</td></tr>
                   ) : loans.map((l) => (
-                    <tr key={String(l.id)}>
-                      <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{String(l.id).slice(0,8)}</td>
-                      <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{String(l.borrower_id).slice(0,8)}...</td>
-                      <td><strong>{formatAmount(Number(l.principal_amount ?? 0))}</strong></td>
+                    <tr key={l.id}>
+                      <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{l.id.slice(0,8)}</td>
+                      <td style={{ fontFamily: "monospace", fontSize: "0.8rem" }}>{l.borrowerId.slice(0,8)}...</td>
+                      <td><strong>{formatAmount(Number(l.principalAmount) / 10_000_000)}</strong></td>
                       <td>
                         <span style={{ padding: "0.15rem 0.5rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, background: l.status === "repaid" ? "rgba(155,111,224,0.12)" : "rgba(34,207,157,0.12)", color: l.status === "repaid" ? "#9b6fe0" : "#22cf9d" }}>
-                          {String(l.status).toUpperCase()}
+                          {l.status.toUpperCase()}
                         </span>
                       </td>
-                      <td style={{ color: "#22cf9d", fontWeight: "bold" }}>{(Number(l.apr_bps ?? 0) / 100).toFixed(2)}%</td>
-                      <td>{l.due_at ? new Date(String(l.due_at)).toLocaleDateString() : "-"}</td>
+                      <td style={{ color: "#22cf9d", fontWeight: "bold" }}>{(Number(l.aprBps) / 100).toFixed(2)}%</td>
+                      <td>{l.dueAt ? l.dueAt.toLocaleDateString() : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -139,16 +121,13 @@ export default async function AdminLoansPage() {
                       </tr>
                     ) : (
                       repayments.map((payment) => {
-                        let txHash = extractPossibleTxHash(payment.tx_ref) ?? "";
-                        if (!txHash || txHash.trim().length < 5) {
-                           txHash = oldHashesMap[String(payment.id)] ?? "";
-                        }
+                        const txHash = payment.txHash ?? "";
                         return (
-                          <tr key={String(payment.id)}>
-                            <td>{String(payment.loan_id).slice(0, 8)}</td>
-                            <td>{String(payment.payer_id).slice(0, 8)}</td>
-                            <td>{formatAmount(Number(payment.amount ?? 0))}</td>
-                            <td>{payment.paid_at ? new Date(String(payment.paid_at)).toLocaleString() : "-"}</td>
+                          <tr key={payment.id}>
+                            <td>{payment.loanId?.slice(0, 8) ?? "-"}</td>
+                            <td>{payment.userId.slice(0, 8)}</td>
+                            <td>{formatAmount(Number(payment.amount) / 10_000_000)}</td>
+                            <td>{payment.createdAt ? payment.createdAt.toLocaleString() : "-"}</td>
                             <td>
                               {isLikelyTxHash(txHash) ? (
                                 <a

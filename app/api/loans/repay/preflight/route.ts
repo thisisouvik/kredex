@@ -1,54 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServerSupabaseClient, getServiceRoleClient } from "@/lib/supabase/server";
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import prisma from "@/lib/prisma";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
-/**
- * GET /api/loans/repay/preflight?loanId=...
- *
- * Returns: lender wallet address + exact repayment breakdown so the client
- * can build and sign the on-chain Stellar payment before calling POST /api/loans/repay.
- */
 export async function GET(request: NextRequest) {
   try {
-    const { user } = await requireAuthenticatedUser("borrower");
-    const loanId   = request.nextUrl.searchParams.get("loanId");
+    const session = await getAuthenticatedUser();
+    if (!session) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const user = session.user;
+    
+    const loanId = request.nextUrl.searchParams.get("loanId");
     if (!loanId) return NextResponse.json({ error: "loanId required" }, { status: 400 });
 
-    const supabase = await getServerSupabaseClient();
-    const srClient = getServiceRoleClient();
-    if (!supabase || !srClient) return NextResponse.json({ error: "Database unavailable" }, { status: 500 });
-
-    const { data: loan } = await supabase
-      .from("loans")
-      .select("id, status, principal_amount, repaid_amount, apr_bps, duration_days, borrower_id")
-      .eq("id", loanId)
-      .eq("borrower_id", user.id)
-      .maybeSingle();
+    const loan = await prisma.loan.findFirst({
+      where: {
+        id: loanId,
+        borrowerId: user.id
+      }
+    });
 
     if (!loan) return NextResponse.json({ error: "Loan not found" }, { status: 404 });
 
     const repayableStatuses = ["active", "funded", "approved"];
-    if (!repayableStatuses.includes(String(loan.status))) {
+    if (!repayableStatuses.includes(loan.status)) {
       return NextResponse.json({ error: "Loan is not in a repayable state" }, { status: 400 });
     }
 
     // Find lender wallet from the ledger (the wallet that funded this loan)
-    // Use service role client to bypass RLS, because this transaction was minted by the lender.
-    const { data: fundTx } = await srClient
-      .from("ledger_transactions")
-      .select("metadata, user_id")
-      .eq("ref_type", "loan_fund")
-      .eq("ref_id", loanId)
-      .maybeSingle();
+    const fundTx = await prisma.ledgerTransaction.findFirst({
+      where: {
+        refType: "loan_fund",
+        refId: loanId
+      }
+    });
 
     let lenderAddress = "";
     let lenderUserId  = "";
     if (fundTx && fundTx.metadata) {
       try {
         const meta = typeof fundTx.metadata === "string" ? JSON.parse(fundTx.metadata) : fundTx.metadata;
-        lenderAddress = String(meta.lenderAddress ?? "");
-        lenderUserId  = String(fundTx.user_id ?? meta.lenderUserId ?? "");
+        lenderAddress = String((meta as Record<string, unknown>).lenderAddress ?? "");
+        lenderUserId  = String(fundTx.userId ?? (meta as Record<string, unknown>).lenderUserId ?? "");
       } catch { /* ignore */ }
     }
 
@@ -57,11 +51,10 @@ export async function GET(request: NextRequest) {
     }
 
     // --- Interest & fee calculation ---
-    // Interest = principal × (apr_bps/10000) × (duration_days/365)   [pro-rated APR]
-    const principal    = Number(loan.principal_amount ?? 0);
-    const alreadyPaid  = Number(loan.repaid_amount ?? 0);
-    const durationDays = Number(loan.duration_days ?? 30);
-    const aprBps       = Number(loan.apr_bps ?? 0);
+    const principal    = Number(loan.principalAmount ?? 0);
+    const alreadyPaid  = Number(loan.repaidAmount ?? 0);
+    const durationDays = Number(loan.durationDays ?? 30);
+    const aprBps       = Number(loan.aprBps ?? 0);
 
     const totalInterest   = principal * (aprBps / 10000) * (durationDays / 365);
     const platformFeePct  = 0.01; // 1% platform fee on principal
@@ -69,14 +62,13 @@ export async function GET(request: NextRequest) {
     const totalDueGross   = +(principal + totalInterest + platformFee).toFixed(7);
     const remainingDue    = +Math.max(0, totalDueGross - alreadyPaid).toFixed(7);
 
-    // Platform wallet (set in env, or use a default treasury address for testnet)
     const platformWallet  = process.env.PLATFORM_FEE_WALLET ?? "";
 
     return NextResponse.json({
       loanId,
       lenderAddress,
       lenderUserId,
-      borrowerAddress: user.user_metadata?.wallet_address ?? "",
+      borrowerAddress: user.wallet ?? "",
       breakdown: {
         principal:       +principal.toFixed(7),
         interest:        +totalInterest.toFixed(7),
@@ -92,6 +84,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     if (isRedirectError(err)) throw err;
+    console.error("Preflight error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

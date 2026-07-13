@@ -5,38 +5,32 @@ import {
   presentLenderMetrics,
 } from "@/lib/dashboard/metrics";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 
 export default async function LenderRiskPage() {
-  const { user } = await requireAuthenticatedUser("lender");
+  const session = await requireAuthenticatedUser();
+  const user = session.user;
   const metrics = await getLenderDashboardMetrics(user.id);
 
-  const supabase = getServiceRoleClient();
-  const [loansRes, profileRes] = supabase
-    ? await Promise.all([
-        supabase
-          .from("loans")
-          .select("id, status, principal_amount, due_at")
-          .order("due_at", { ascending: true })
-          .limit(12),
-        supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .maybeSingle(),
-      ])
-    : [{ data: [] }, { data: null }];
-
-  const loans = loansRes.data ?? [];
-  const profile = profileRes.data;
+  const [loans, profile] = await Promise.all([
+    prisma.loan.findMany({
+      select: { id: true, status: true, principalAmount: true, dueAt: true },
+      orderBy: { dueAt: "asc" },
+      take: 12
+    }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { fullName: true }
+    })
+  ]);
 
   return (
     <WorkspaceFrame
       roleLabel="Lender Dashboard"
       heading="Risk Monitor"
       description="Monitor loan maturity and defaults to keep portfolio risk within target bounds."
-      email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      email={null}
+      userName={user.user_metadata?.full_name ?? profile?.fullName ?? ""}
       metrics={presentLenderMetrics(metrics)}
       currentPath="/dashboard/lender/risk"
       links={lenderNavLinks}
@@ -52,17 +46,17 @@ export default async function LenderRiskPage() {
             </tr>
           </thead>
           <tbody>
-            {(loans ?? []).length === 0 ? (
+            {loans.length === 0 ? (
               <tr>
                 <td colSpan={4} className="workspace-empty-row">No loan risk data available yet.</td>
               </tr>
             ) : (
-              (loans ?? []).map((loan) => (
-                <tr key={String(loan.id)}>
-                  <td>{String(loan.id).slice(0, 8)}</td>
-                  <td>{String(loan.status)}</td>
-                  <td>{Number(loan.principal_amount ?? 0).toFixed(2)}</td>
-                  <td>{loan.due_at ? new Date(String(loan.due_at)).toLocaleDateString() : "-"}</td>
+              loans.map((loan) => (
+                <tr key={loan.id}>
+                  <td>{loan.id.slice(0, 8)}</td>
+                  <td>{loan.status}</td>
+                  <td>{(Number(loan.principalAmount) / 10_000_000).toFixed(2)}</td>
+                  <td>{loan.dueAt ? loan.dueAt.toLocaleDateString() : "-"}</td>
                 </tr>
               ))
             )}

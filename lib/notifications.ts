@@ -1,29 +1,22 @@
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 
 export async function createNotification({
   userId,
   title,
   message,
-  type,
 }: {
   userId: string;
   title: string;
   message: string;
-  type: string;
 }) {
-  const supabase = getServiceRoleClient();
-  if (!supabase) return null;
-
   try {
-    const { error } = await supabase.from("notifications").insert({
-      user_id: userId,
-      title,
-      message,
-      type,
+    await prisma.notification.create({
+      data: {
+        userId,
+        title,
+        message,
+      }
     });
-    if (error) {
-      console.error("Failed to create notification:", error);
-    }
   } catch (err) {
     console.error("Error creating notification", err);
   }

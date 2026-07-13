@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Monitor, ShieldCheck, AlertTriangle } from "lucide-react";
 import { isConnected, setAllowed, getAddress } from "@stellar/freighter-api";
 

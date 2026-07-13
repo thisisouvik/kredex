@@ -3,7 +3,7 @@
  * Manages identity verification status and document storage
  */
 
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 
 export type KYCStatus = "pending" | "submitted" | "verified" | "rejected";
 
@@ -22,51 +22,41 @@ export interface KYCData {
 export async function storeKYCDocument(
   userId: string,
   ipfsHash: string,
-  ipfsUrl: string
+  _ipfsUrl: string // Unused in new schema directly, just using ipfsHash
 ): Promise<void> {
-  const supabase = await getServerSupabaseClient();
-  if (!supabase) throw new Error("Supabase not available");
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      government_id_ipfs_hash: ipfsHash,
-      government_id_url: ipfsUrl,
-      kyc_status: "submitted",
-      kyc_submitted_at: new Date().toISOString(),
-    })
-    .eq("id", userId);
-
-  if (error) throw error;
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      kycIpfsCid: ipfsHash,
+      kycStatus: "submitted",
+      kycSubmittedAt: new Date(),
+    }
+  });
 }
 
 /**
  * Get KYC data for a user (admin only)
  */
 export async function getKYCData(userId: string): Promise<KYCData | null> {
-  const supabase = await getServerSupabaseClient();
-  if (!supabase) throw new Error("Supabase not available");
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      kycStatus: true,
+      kycIpfsCid: true,
+      kycSubmittedAt: true,
+      // Verified at and rejection reason are not currently stored natively in the simplified schema,
+      // but they can be inferred or derived if added back.
+    }
+  });
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      "kyc_status, government_id_ipfs_hash, government_id_url, kyc_submitted_at, kyc_verified_at, kyc_rejection_reason"
-    )
-    .eq("id", userId)
-    .maybeSingle();
+  if (!user) return null;
 
-  if (error) throw error;
-
-  return data
-    ? {
-        status: data.kyc_status as KYCStatus,
-        government_id_ipfs_hash: data.government_id_ipfs_hash,
-        government_id_url: data.government_id_url,
-        submitted_at: data.kyc_submitted_at,
-        verified_at: data.kyc_verified_at,
-        rejection_reason: data.kyc_rejection_reason,
-      }
-    : null;
+  return {
+    status: user.kycStatus as KYCStatus,
+    government_id_ipfs_hash: user.kycIpfsCid ?? undefined,
+    government_id_url: user.kycIpfsCid ? `https://gateway.pinata.cloud/ipfs/${user.kycIpfsCid}` : undefined,
+    submitted_at: user.kycSubmittedAt?.toISOString(),
+  };
 }
 
 /**

@@ -30,7 +30,6 @@ export async function proxy(request: NextRequest) {
   if (isStatic) return NextResponse.next({ request });
 
   const bypassUserId = request.headers.get("x-dev-user-id")?.trim() ?? "";
-  const bypassRoleRaw = request.headers.get("x-dev-role")?.trim();
   const bypassActive = DEV_BYPASS_ENABLED && !!bypassUserId && isValidUuid(bypassUserId);
 
   // ── ② Rate limiting on API routes ───────────────────────────────────────────

@@ -17,6 +17,7 @@ export function TestimonialsSection({ items }: TestimonialsSectionProps) {
           {items.map((item, index) => (
             <article key={index} className="glass-panel testimonial-card">
               <div className="testimonial-header">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.avatar}
                   alt={item.name}

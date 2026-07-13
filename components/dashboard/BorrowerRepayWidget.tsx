@@ -342,7 +342,7 @@ export function BorrowerRepayWidget({ loan, dueAmount: initialDue }: { loan: Rep
             <span>Repaid: <strong style={{ color: "#22cf9d" }}>{loan.repaid_amount.toFixed(2)} XLM</strong></span>
             <span style={{ fontWeight: 700 }}>{pct}%</span>
           </div>
-          <div style={{ height: "10px", borderRadius: "9999px", background: "#eef0f8", overflow: "hidden" }}>
+          <div style={{ height: "10px", borderRadius: "9999px", background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
             <div style={{
               height: "100%", width: `${pct}%`,
               background: "linear-gradient(90deg,#7e2fd0,#22cf9d)",
@@ -376,8 +376,8 @@ export function BorrowerRepayWidget({ loan, dueAmount: initialDue }: { loan: Rep
                 disabled={isBusy}
                 style={{
                   flex: 1, minWidth: "110px", padding: "0.75rem 1rem",
-                  background: "#fff", color: "#7e2fd0",
-                  border: "2px solid rgba(126,47,208,0.35)",
+                  background: "rgba(126,47,208,0.1)", color: "#9b6fe0",
+                  border: "1px solid rgba(126,47,208,0.35)",
                   borderRadius: "0.6rem", fontSize: "0.875rem", fontWeight: 700,
                   cursor: isBusy ? "not-allowed" : "pointer",
                   transition: "border-color 0.2s",
@@ -398,12 +398,12 @@ export function BorrowerRepayWidget({ loan, dueAmount: initialDue }: { loan: Rep
                 disabled={isBusy}
                 style={{
                   flex: 1, padding: "0.7rem 0.9rem",
-                  border: "2px solid #e5e7eb", borderRadius: "0.6rem",
-                  fontSize: "0.875rem", outline: "none",
+                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.15)",
+                  color: "#fff", borderRadius: "0.6rem", fontSize: "0.9rem",
                   transition: "border-color 0.2s",
                 }}
                 onFocus={(e) => (e.target.style.borderColor = "#7e2fd0")}
-                onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.15)")}
               />
               <button
                 onClick={() => {
@@ -420,8 +420,8 @@ export function BorrowerRepayWidget({ loan, dueAmount: initialDue }: { loan: Rep
                   padding: "0.7rem 1.5rem",
                   background: customAmount && !isBusy
                     ? "linear-gradient(135deg,#7e2fd0,#5a1fad)"
-                    : "#e5e7eb",
-                  color: customAmount && !isBusy ? "#fff" : "#9ca3af",
+                    : "rgba(255,255,255,0.06)",
+                  color: customAmount && !isBusy ? "#fff" : "rgba(255,255,255,0.4)",
                   border: "none", borderRadius: "0.6rem",
                   fontSize: "0.875rem", fontWeight: 700,
                   cursor: isBusy || !customAmount ? "not-allowed" : "pointer",

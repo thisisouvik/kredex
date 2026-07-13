@@ -109,11 +109,6 @@ export function ProfileSettingsForm({
   const handleLogout = async () => {
     setSigningOut(true);
     try {
-      const { getBrowserSupabaseClient } = await import("@/lib/supabase/client");
-      const supabase = getBrowserSupabaseClient();
-      if (supabase) {
-        await supabase.auth.signOut();
-      }
       showAlert("Farewell!", "Successfully signed out. See you next time.", "success", 3000);
       
       // Delay to let the user see the alert

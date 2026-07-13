@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getScoreSafe } from "@/lib/contracts/reputation";
 import { withCache } from "@/lib/redis/cache";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -14,14 +14,6 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS });
 }
 
-/**
- * GET /api/reputation/[address]
- *
- * Public, unauthenticated endpoint — readable by any Stellar protocol or dApp.
- * Returns the reputation score for a Stellar address.
- * Sources: Soroban contract (primary) → Supabase reputation_events (fallback).
- * Cached in Redis for 5 minutes per address.
- */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ address: string }> }
@@ -75,22 +67,19 @@ async function fetchReputation(address: string) {
     };
   }
 
-  // ── Supabase fallback ──────────────────────────────────────────────────────
-  const srClient = getServiceRoleClient();
+  // ── Prisma fallback ──────────────────────────────────────────────────────
+  const user = await prisma.user.findUnique({
+    where: { walletAddress: address },
+    select: {
+      kycTier: true,
+      reputationScore: true,
+      reputationTier: true,
+      role: true
+    }
+  });
 
-  if (!srClient) {
-    return buildFallback(address, 250, "None", 0, false, NETWORK, CONTRACT_ID);
-  }
-
-  // Look up the wallet_profiles entry by Stellar address
-  const { data: profile } = await srClient
-    .from("wallet_profiles")
-    .select("id, kyc_tier, is_frozen, reputation_score, reputation_tier")
-    .eq("wallet_address", address)
-    .maybeSingle();
-
-  if (!profile) {
-    // Address is unknown — return a "not found" rather than fabricated data
+  if (!user) {
+    // Address is unknown
     return {
       address,
       score: null,
@@ -105,40 +94,12 @@ async function fetchReputation(address: string) {
     };
   }
 
-  // Sum reputation event deltas from the events table (baseline 250)
-  const { data: events } = await srClient
-    .from("reputation_events")
-    .select("points_delta")
-    .eq("user_id", profile.id);
+  const score = user.reputationScore;
+  const tier = user.reputationTier;
+  const kycTier = user.kycTier ?? 0;
+  // Currently no explicit 'isFrozen' flag in new schema, assuming false for now unless derived from role
+  const isFrozen = false; 
 
-  const deltaSum = (events ?? []).reduce(
-    (sum, e) => sum + Number(e.points_delta ?? 0),
-    0
-  );
-  const score = Math.max(0, 250 + deltaSum);
-
-  const tier = computeTier(score);
-
-  return buildFallback(
-    address,
-    score,
-    tier,
-    Number(profile.kyc_tier ?? 0),
-    Boolean(profile.is_frozen),
-    NETWORK,
-    CONTRACT_ID
-  );
-}
-
-function buildFallback(
-  address: string,
-  score: number,
-  tier: string,
-  kycTier: number,
-  isFrozen: boolean,
-  network: string,
-  contractId: string | null
-) {
   return {
     address,
     score,
@@ -146,17 +107,9 @@ function buildFallback(
     maxLoanXlm: score * 10,
     kycTier,
     isFrozen,
-    source: "supabase_fallback" as const,
-    contractId,
-    network,
+    source: "prisma_fallback" as const,
+    contractId: CONTRACT_ID,
+    network: NETWORK,
     fetchedAt: new Date().toISOString(),
   };
-}
-
-function computeTier(score: number): string {
-  if (score >= 1000) return "Platinum";
-  if (score >= 500) return "Gold";
-  if (score >= 150) return "Silver";
-  if (score >= 50) return "Beginner";
-  return "None";
 }

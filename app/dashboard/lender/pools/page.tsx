@@ -3,59 +3,53 @@ import { LenderForms } from "@/components/dashboard/LenderForms";
 import { InteractiveLineChart } from "@/components/dashboard/InteractiveLineChart";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getLenderDashboardMetrics, presentLenderMetrics } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { lenderNavLinks } from "@/lib/dashboard/lender-links";
 import { formatCurrency } from "@/lib/utils/formatting";
 import { isLikelyTxHash, buildStellarTxVerificationUrl } from "@/lib/stellar/explorer";
 
 export default async function LenderPoolsPage() {
-  const { user } = await requireAuthenticatedUser("lender");
+  const session = await requireAuthenticatedUser();
+  const user = session.user;
   const metrics = await getLenderDashboardMetrics(user.id);
-  const supabase = getServiceRoleClient();
 
-  const [poolsRes, positionsRes, profileRes, txHistoryRes] = supabase
-    ? await Promise.all([
-        supabase
-          .from("lending_pools")
-          .select("id, name, status, apr_bps, aqua_apr_bps, total_liquidity, available_liquidity")
-          .order("created_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("pool_positions")
-          .select("id, pool_id, status, principal_amount, earned_interest, earned_aqua, opened_at")
-          .eq("lender_id", user.id)
-          .order("opened_at", { ascending: true }),
-        supabase
-          .from("profiles")
-          .select("full_name, kyc_status")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase
-          .from("ledger_transactions")
-          .select("id, amount, category, metadata, status, created_at")
-          .eq("user_id", user.id)
-          .eq("ref_type", "pool_position")
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ])
-    : [{ data: [] }, { data: [] }, { data: null }, { data: [] }];
+  const [pools, positions, profile, txHistory] = await Promise.all([
+    prisma.pool.findMany({
+      select: { id: true, name: true, status: true, apy: true, totalLiquidity: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 8
+    }),
+    prisma.poolPosition.findMany({
+      where: { lenderId: user.id },
+      select: { id: true, poolId: true, status: true, principalAmount: true, earnedInterest: true, createdAt: true },
+      orderBy: { createdAt: "asc" }
+    }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { fullName: true, kycStatus: true }
+    }),
+    prisma.ledgerTransaction.findMany({
+      where: {
+        userId: user.id,
+        refType: "pool_deposit" // or pool_withdraw
+      },
+      select: { id: true, amount: true, refType: true, txHash: true, status: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 10
+    })
+  ]);
 
-  const pools     = poolsRes.data     ?? [];
-  const positions = positionsRes.data ?? [];
-  const profile   = profileRes.data;
-  const txHistory = txHistoryRes.data ?? [];
-
-  const totalDeployed = positions.reduce((s, p) => s + Number(p.principal_amount ?? 0), 0);
-  const totalEarned   = positions.reduce((s, p) => s + Number(p.earned_interest   ?? 0), 0);
-  const totalEarnedAqua = positions.reduce((s, p) => s + Number(p.earned_aqua   ?? 0), 0);
+  const totalDeployed = positions.reduce((s, p) => s + (Number(p.principalAmount) / 10_000_000), 0);
+  const totalEarned   = positions.reduce((s, p) => s + (Number(p.earnedInterest) / 10_000_000), 0);
+  const totalEarnedAqua = 0; // Not tracked in new schema
 
   // Generate cumulative portfolio growth data for the interactive chart based on pool positions
   let cumulativeValue = 0;
   const chartData = positions.length > 0 
     ? positions.map(p => {
-        cumulativeValue += (Number(p.principal_amount) + Number(p.earned_interest));
+        cumulativeValue += (Number(p.principalAmount) / 10_000_000 + Number(p.earnedInterest) / 10_000_000);
         return {
-           label: `Account Value on ${p.opened_at ? new Date(String(p.opened_at)).toLocaleDateString() : "Active"}`,
+           label: `Account Value on ${p.createdAt ? p.createdAt.toLocaleDateString() : "Active"}`,
            value: cumulativeValue
         };
       })
@@ -67,17 +61,35 @@ export default async function LenderPoolsPage() {
       ];
 
   if (chartData.length === 1) {
-    // Inject a starting zero-point if there is only one position so the graph spans out
     chartData.unshift({ label: 'Initial Deposit', value: 0 });
   }
+
+  // Format pools and positions to match LenderForms props
+  const formattedPools = pools.map(pool => ({
+    id: pool.id,
+    name: pool.name,
+    status: pool.status,
+    apr_bps: Math.round(pool.apy * 10000),
+    aqua_apr_bps: undefined,
+    total_liquidity: Number(pool.totalLiquidity) / 10_000_000,
+    available_liquidity: Number(pool.totalLiquidity) / 10_000_000,
+  }));
+
+  const formattedPositions = positions.map(pos => ({
+    id: pos.id,
+    pool_id: pos.poolId,
+    status: pos.status,
+    principal_amount: Number(pos.principalAmount) / 10_000_000,
+    earned_interest: Number(pos.earnedInterest) / 10_000_000,
+  }));
 
   return (
     <WorkspaceFrame
       roleLabel="Lender Dashboard"
       heading="Pool Investment"
       description="Deposit XLM into a lending pool and earn passive APR. The pool auto-matches your capital to open borrower requests."
-      email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      email={null}
+      userName={user.user_metadata?.full_name ?? profile?.fullName ?? ""}
       metrics={presentLenderMetrics(metrics)}
       currentPath="/dashboard/lender/pools"
       profilePath="/dashboard/lender/profile"
@@ -85,8 +97,6 @@ export default async function LenderPoolsPage() {
       links={lenderNavLinks}
     >
       <div className="workspace-stack">
-
-        {/* ── My positions summary ──────────────────────────────── */}
         <section className="workspace-grid workspace-grid--two">
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             {[
@@ -112,10 +122,9 @@ export default async function LenderPoolsPage() {
           </article>
         </section>
 
-        {/* ── Available pools table ─────────────────────────────── */}
         <article className="workspace-card workspace-card--full">
           <h2 className="workspace-card-title">Available Lending Pools</h2>
-          {pools.length === 0 ? (
+          {formattedPools.length === 0 ? (
             <p className="workspace-card-copy" style={{ opacity: 0.6 }}>
               No lending pools have been created yet. Check back soon.
             </p>
@@ -133,14 +142,14 @@ export default async function LenderPoolsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pools.map((pool) => {
-                    const myPos = positions.find((p) => String(p.pool_id) === String(pool.id));
-                    const baseApr = (Number(pool.apr_bps ?? 0) / 100).toFixed(2);
-                    const aquaApr = pool.aqua_apr_bps ? (Number(pool.aqua_apr_bps) / 100).toFixed(2) : null;
+                  {formattedPools.map((pool) => {
+                    const myPos = formattedPositions.find((p) => p.pool_id === pool.id);
+                    const baseApr = (pool.apr_bps / 100).toFixed(2);
+                    const aquaApr = pool.aqua_apr_bps ? (pool.aqua_apr_bps / 100).toFixed(2) : null;
                     return (
-                      <tr key={String(pool.id)}>
+                      <tr key={pool.id}>
                         <td>
-                          <strong>{String(pool.name)}</strong>
+                          <strong>{pool.name}</strong>
                           {aquaApr && (
                             <span style={{ marginLeft: "0.5rem", fontSize: "0.7rem", background: "rgba(56,189,248,0.15)", color: "#38bdf8", padding: "0.1rem 0.4rem", borderRadius: "4px", fontWeight: 700 }}>
                               💧 AQUA BOOST
@@ -154,7 +163,7 @@ export default async function LenderPoolsPage() {
                             background: pool.status === "active" ? "rgba(34,207,157,0.12)" : "rgba(255,107,107,0.12)",
                             color: pool.status === "active" ? "#22cf9d" : "#ff6b6b",
                           }}>
-                            {String(pool.status).toUpperCase()}
+                            {pool.status.toUpperCase()}
                           </span>
                         </td>
                         <td>
@@ -165,10 +174,10 @@ export default async function LenderPoolsPage() {
                             )}
                           </div>
                         </td>
-                        <td>{formatCurrency(Number(pool.total_liquidity ?? 0))}</td>
-                        <td>{Number(pool.available_liquidity ?? 0).toFixed(2)} XLM</td>
+                        <td>{formatCurrency(pool.total_liquidity)}</td>
+                        <td>{pool.available_liquidity.toFixed(2)} XLM</td>
                         <td style={{ color: myPos ? "#22cf9d" : "inherit", fontWeight: myPos ? 600 : 400 }}>
-                          {myPos ? `${Number(myPos.principal_amount ?? 0).toFixed(2)} XLM ✅` : "—"}
+                          {myPos ? `${myPos.principal_amount.toFixed(2)} XLM ✅` : "—"}
                         </td>
                       </tr>
                     );
@@ -179,24 +188,22 @@ export default async function LenderPoolsPage() {
           )}
         </article>
 
-        {/* ── Deposit / Withdraw forms ──────────────────────────── */}
         <section className="workspace-grid workspace-grid--two">
-          <LenderForms pools={pools} positions={positions} />
+          <LenderForms pools={formattedPools} positions={formattedPositions} />
 
-          {/* My positions detail */}
           <article className="workspace-card">
             <h2 className="workspace-card-title">Your Positions</h2>
-            {positions.length === 0 ? (
+            {formattedPositions.length === 0 ? (
               <p className="workspace-card-copy" style={{ opacity: 0.6 }}>
                 No positions yet. Make your first deposit using the form.
               </p>
             ) : (
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-                {positions.map((pos) => {
-                  const pool = pools.find((p) => String(p.id) === String(pos.pool_id));
+                {formattedPositions.map((pos) => {
+                  const pool = formattedPools.find((p) => p.id === pos.pool_id);
                   return (
                     <li
-                      key={String(pos.id)}
+                      key={pos.id}
                       style={{
                         padding: "0.75rem",
                         borderRadius: "0.6rem",
@@ -206,7 +213,7 @@ export default async function LenderPoolsPage() {
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
                         <span style={{ fontWeight: 600, fontSize: "0.88rem" }}>
-                          {pool ? String(pool.name) : `Pool ${String(pos.pool_id).slice(0, 6)}`}
+                          {pool ? pool.name : `Pool ${pos.pool_id.slice(0, 6)}`}
                         </span>
                         <span style={{
                           fontSize: "0.75rem", fontWeight: 600, padding: "0.1rem 0.45rem",
@@ -214,12 +221,12 @@ export default async function LenderPoolsPage() {
                           background: pos.status === "active" ? "rgba(34,207,157,0.12)" : "rgba(255,107,107,0.12)",
                           color: pos.status === "active" ? "#22cf9d" : "#ff6b6b",
                         }}>
-                          {String(pos.status ?? "active").toUpperCase()}
+                          {pos.status.toUpperCase()}
                         </span>
                       </div>
                       <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.83rem", opacity: 0.75 }}>
-                        <span>Deployed: <strong>{Number(pos.principal_amount ?? 0).toFixed(2)} XLM</strong></span>
-                        <span>Earned: <strong style={{ color: "#22cf9d" }}>{Number(pos.earned_interest ?? 0).toFixed(4)} XLM</strong></span>
+                        <span>Deployed: <strong>{pos.principal_amount.toFixed(2)} XLM</strong></span>
+                        <span>Earned: <strong style={{ color: "#22cf9d" }}>{pos.earned_interest.toFixed(4)} XLM</strong></span>
                       </div>
                     </li>
                   );
@@ -229,7 +236,6 @@ export default async function LenderPoolsPage() {
           </article>
         </section>
 
-        {/* ── Transaction History ──────────────────────────── */}
         {txHistory.length > 0 && (
           <section className="workspace-card workspace-card--full" style={{ marginTop: "1rem" }}>
             <h2 className="workspace-card-title">Recent Activity</h2>
@@ -246,18 +252,13 @@ export default async function LenderPoolsPage() {
                 </thead>
                 <tbody>
                   {txHistory.map((tx) => {
-                    let txHash = "";
-                    try {
-                      const meta = JSON.parse(String(tx.metadata || "{}"));
-                      txHash = meta.txHash ?? "";
-                    } catch {}
-
-                    const isDeposit = tx.category === "deposit";
+                    const txHash = tx.txHash ?? "";
+                    const isDeposit = tx.refType === "pool_deposit";
 
                     return (
-                      <tr key={String(tx.id)}>
+                      <tr key={tx.id}>
                         <td style={{ opacity: 0.8, fontSize: "0.85rem" }}>
-                          {tx.created_at ? new Date(String(tx.created_at)).toLocaleDateString() : "—"}
+                          {tx.createdAt ? tx.createdAt.toLocaleDateString() : "—"}
                         </td>
                         <td>
                           <span style={{ 
@@ -265,10 +266,10 @@ export default async function LenderPoolsPage() {
                             background: isDeposit ? "rgba(34,207,157,0.12)" : "rgba(155,111,224,0.12)",
                             color: isDeposit ? "#22cf9d" : "#9b6fe0" 
                           }}>
-                            {String(tx.category ?? "Unknown").toUpperCase()}
+                            {isDeposit ? "DEPOSIT" : "WITHDRAW"}
                           </span>
                         </td>
-                        <td style={{ fontWeight: 600 }}>{Number(tx.amount || 0).toFixed(2)} XLM</td>
+                        <td style={{ fontWeight: 600 }}>{(Number(tx.amount) / 10_000_000).toFixed(2)} XLM</td>
                         <td style={{ opacity: 0.7, fontSize: "0.85rem", textTransform: "capitalize" }}>{tx.status}</td>
                         <td>
                           {isLikelyTxHash(txHash) ? (

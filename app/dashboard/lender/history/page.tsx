@@ -22,19 +22,48 @@ export default async function LenderHistoryPage() {
     take: 100,
   }).catch(() => []);
 
-  // Fetch incoming payments (repayments to this lender, where the borrower initiated it)
-  const allRepays = await prisma.ledgerTransaction.findMany({
-    where: { refType: "loan_repay" },
-    orderBy: { createdAt: "desc" },
-    take: 200,
+  // Fetch all loans this lender has funded
+  const fundedLoans = await prisma.loan.findMany({
+    where: { lenderId: user.id },
+    select: { id: true }
   }).catch(() => []);
+  const fundedLoanIds = fundedLoans.map(l => l.id);
 
-  const incomingRepays = allRepays.filter(tx => {
+  // Fetch incoming payments (repayments to this lender, where the borrower initiated it)
+  let incomingRepays: typeof userTxs = [];
+  if (fundedLoanIds.length > 0) {
+    incomingRepays = await prisma.ledgerTransaction.findMany({
+      where: {
+        refType: "loan_repay",
+        OR: [
+          { refId: { in: fundedLoanIds } },
+          { loanId: { in: fundedLoanIds } }
+        ]
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }).catch(() => []);
+  }
+
+  // Fallback metadata check for legacy records without loanId/refId mapped
+  const unmappedRepays = await prisma.ledgerTransaction.findMany({
+    where: {
+      refType: "loan_repay",
+      refId: null,
+      loanId: null
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  }).catch(() => []);
+  
+  const metadataRepays = unmappedRepays.filter(tx => {
      try {
-       const meta = JSON.parse(String(tx.metadata || "{}")) as Record<string, unknown>;
+       const meta = (typeof tx.metadata === "string" ? JSON.parse(tx.metadata) : (tx.metadata || {})) as Record<string, unknown>;
        return String(meta.lenderUserId) === String(user.id) || String(meta.lenderAddress) === String(user.id);
      } catch { return false; }
   });
+
+  incomingRepays = [...incomingRepays, ...metadataRepays];
 
   // Merge, dedup, sort
   const txMap = new Map();
@@ -73,10 +102,10 @@ export default async function LenderHistoryPage() {
                 let txHash = "";
                 let subLabel = "";
                 try {
-                  const meta = JSON.parse(String(tx.metadata ?? "{}"));
-                  txHash = String(meta.txHash ?? "");
+                  const meta = (typeof tx.metadata === "string" ? JSON.parse(tx.metadata) : (tx.metadata || {})) as Record<string, unknown>;
+                  txHash = String(tx.txHash || meta.txHash || "");
                   if (meta.loanId) subLabel = `Loan #${String(meta.loanId).slice(0,8)}`;
-                  else if (tx.ref_id) subLabel = `Ref #${String(tx.ref_id).slice(0,8)}`;
+                  else if (tx.refId) subLabel = `Ref #${String(tx.refId).slice(0,8)}`;
                 } catch { /* ok */ }
                 
                 const hasTx = isLikelyTxHash(txHash);
@@ -100,7 +129,7 @@ export default async function LenderHistoryPage() {
                    "purple": { bg: "rgba(126,47,208,0.04)", border: "rgba(126,47,208,0.12)", iconBg: "rgba(126,47,208,0.1)", text: "#7e2fd0" },
                    "green": { bg: "rgba(34,207,157,0.04)", border: "rgba(34,207,157,0.12)", iconBg: "rgba(34,207,157,0.1)", text: "#22cf9d" },
                    "blue": { bg: "rgba(59,130,246,0.04)", border: "rgba(59,130,246,0.12)", iconBg: "rgba(59,130,246,0.1)", text: "#3b82f6" },
-                   "gray": { bg: "rgba(107,114,128,0.04)", border: "rgba(107,114,128,0.12)", iconBg: "rgba(107,114,128,0.1)", text: "#6b7280" }
+                   "gray": { bg: "rgba(107,114,128,0.04)", border: "rgba(107,114,128,0.12)", iconBg: "rgba(107,114,128,0.1)", text: "#f4f5f7" }
                 };
                 const c = colors[colorClass as keyof typeof colors];
 
@@ -122,7 +151,7 @@ export default async function LenderHistoryPage() {
 
                     {/* Details */}
                     <div style={{ flex: 1, minWidth: "200px" }}>
-                      <p style={{ margin: 0, fontWeight: 700, fontSize: "0.88rem", color: "#111827" }}>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: "0.88rem", color: "#fbfbfb" }}>
                         {label}
                       </p>
                       <p style={{ margin: "0.15rem 0 0", fontSize: "0.75rem", color: "#9ca3af", fontFamily: "monospace" }}>

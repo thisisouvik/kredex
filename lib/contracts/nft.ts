@@ -9,8 +9,6 @@
 import {
   simulateContractCall,
   addressToScVal,
-  stringToScVal,
-  enumToScVal,
 } from "@/lib/stellar/soroban";
 
 const CONTRACT_ID = process.env.NEXT_PUBLIC_REPUTATION_NFT_CONTRACT_ID ?? "";

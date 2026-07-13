@@ -8,7 +8,7 @@ interface KycGateBannerProps {
   kycStatus: string; // "PENDING" | "SUBMITTED" | "VERIFIED"
 }
 
-export function KycGateBanner({ kycTier, kycStatus }: KycGateBannerProps) {
+export function KycGateBanner({ kycTier, kycStatus: _kycStatus }: KycGateBannerProps) {
   const limitUsd = getKycLimitUsd(kycTier);
   const label = kycTierLabel(kycTier);
   const color = kycTierColor(kycTier);

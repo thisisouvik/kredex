@@ -6,56 +6,31 @@ import {
   getAdminDashboardMetrics,
   presentAdminMetrics,
 } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 
 export default async function AdminSecurityPage() {
-  const { user } = await requireTradeVaultAdmin();
+  const session = await requireTradeVaultAdmin();
+  const user = session.user;
   const metrics = await getAdminDashboardMetrics();
-  const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
+  const walletAddress = user.wallet || null;
   const walletConnected = Boolean(walletAddress);
 
-  const supabase = getServiceRoleClient();
-  const [signalsRes, riskRes, profilesRes] = supabase
-    ? await Promise.all([
-        supabase
-          .from("fraud_signals")
-          .select("id, user_id, signal_type, severity, resolved, created_at")
-          .order("created_at", { ascending: false })
-          .limit(40),
-        supabase
-          .from("risk_assessments")
-          .select("id, user_id, score, decision, assessed_at")
-          .order("assessed_at", { ascending: false })
-          .limit(40),
-        supabase
-          .from("profiles")
-          .select("id, full_name, kyc_status, risk_status")
-          .order("created_at", { ascending: false })
-          .limit(120),
-      ])
-    : [{ data: [] as Array<Record<string, unknown>> }, { data: [] as Array<Record<string, unknown>> }, { data: [] as Array<Record<string, unknown>> }];
+  const profiles = await prisma.user.findMany({
+    select: { id: true, fullName: true, kycStatus: true, riskStatus: true },
+    orderBy: { createdAt: "desc" },
+    take: 120
+  });
 
-  const signals = signalsRes.data ?? [];
-  const assessments = riskRes.data ?? [];
-  const profiles = profilesRes.data ?? [];
-
-  const maliciousIds = new Set(
-    signals
-      .filter((signal) => !signal.resolved && Number(signal.severity ?? 0) >= 4)
-      .map((signal) => String(signal.user_id)),
-  );
-
-  const flaggedProfiles = profiles.filter((profile) => ["high", "blocked"].includes(String(profile.risk_status)));
-  const pendingKycProfiles = profiles.filter((profile) => ["pending", "submitted", "rejected"].includes(String(profile.kyc_status)));
-  flaggedProfiles.forEach((profile) => maliciousIds.add(String(profile.id)));
+  const flaggedProfiles = profiles.filter((profile) => ["high", "blocked"].includes(profile.riskStatus));
+  const pendingKycProfiles = profiles.filter((profile) => ["pending", "submitted", "rejected"].includes(profile.kycStatus));
 
   return (
     <WorkspaceFrame
       roleLabel="Trade Vault Admin"
       heading="Security Center"
-      description="Investigate fraud signals, manual-review decisions, and suspicious account behavior."
-      email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? "Admin")}
+      description="Investigate manual-review decisions, and suspicious account behavior."
+      email={null}
+      userName={user.user_metadata?.full_name || "Admin"}
       metrics={presentAdminMetrics(metrics)}
       links={[...adminNavLinks]}
       currentPath="/dashboard/admin/security"
@@ -64,8 +39,8 @@ export default async function AdminSecurityPage() {
         <WalletCard
           address={walletAddress}
           available={0}
-          inLoansOrPools={Number(flaggedProfiles.length)}
-          pending={Number(maliciousIds.size)}
+          inLoansOrPools={flaggedProfiles.length}
+          pending={0}
           inLoansLabel="Flagged"
           compact
           inLoansIsCurrency={false}
@@ -86,8 +61,6 @@ export default async function AdminSecurityPage() {
                 <h2 className="workspace-card-title">Security posture snapshot</h2>
                 <ul className="workspace-list workspace-list--compact">
                   <li><span>Flagged accounts</span><strong>{flaggedProfiles.length}</strong></li>
-                  <li><span>Malicious indicators</span><strong>{maliciousIds.size}</strong></li>
-                  <li><span>Open fraud signals</span><strong>{signals.filter((signal) => !signal.resolved).length}</strong></li>
                   <li><span>KYC incomplete</span><strong>{pendingKycProfiles.length}</strong></li>
                 </ul>
               </article>
@@ -99,46 +72,11 @@ export default async function AdminSecurityPage() {
                     {walletConnected ? "✅" : "❌"} <span style={{ opacity: walletConnected ? 1 : 0.7 }}>Treasury Wallet Connected</span>
                   </li>
                   <li style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    {maliciousIds.size === 0 ? "✅" : "⚠️"} <span style={{ opacity: maliciousIds.size === 0 ? 1 : 0.7 }}>No Active Malicious Indicators</span>
-                  </li>
-                  <li style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    {signals.filter(s => !s.resolved).length === 0 ? "✅" : "⚠️"} <span style={{ opacity: signals.filter(s => !s.resolved).length === 0 ? 1 : 0.7 }}>All Fraud Signals Resolved</span>
+                    {flaggedProfiles.length === 0 ? "✅" : "⚠️"} <span style={{ opacity: flaggedProfiles.length === 0 ? 1 : 0.7 }}>No High Risk Accounts</span>
                   </li>
                   <li style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     {pendingKycProfiles.length === 0 ? "✅" : "⚠️"} <span style={{ opacity: pendingKycProfiles.length === 0 ? 1 : 0.7 }}>KYC Queue Cleared</span>
                   </li>
-                </ul>
-              </article>
-            </section>
-
-            <section className="workspace-grid workspace-grid--two">
-              <article className="workspace-card workspace-card--full">
-                <h2 className="workspace-card-title">Recent fraud signals</h2>
-                <ul className="workspace-list">
-                  {signals.length === 0 ? (
-                    <li>No fraud signals logged.</li>
-                  ) : (
-                    signals.map((signal) => (
-                      <li key={String(signal.id)}>
-                        {String(signal.signal_type)} | severity {String(signal.severity)} | user {String(signal.user_id).slice(0, 8)} | {signal.resolved ? "resolved" : "open"}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </article>
-
-              <article className="workspace-card workspace-card--full">
-                <h2 className="workspace-card-title">Latest risk assessments</h2>
-                <ul className="workspace-list">
-                  {assessments.length === 0 ? (
-                    <li>No risk assessments logged.</li>
-                  ) : (
-                    assessments.map((assessment) => (
-                      <li key={String(assessment.id)}>
-                        user {String(assessment.user_id).slice(0, 8)} | score {String(assessment.score)} | decision {String(assessment.decision)}
-                      </li>
-                    ))
-                  )}
                 </ul>
               </article>
             </section>

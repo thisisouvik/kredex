@@ -2,7 +2,7 @@
 
 import { getAddress, getNetworkDetails, isConnected, requestAccess } from "@stellar/freighter-api";
 import { useEffect, useMemo, useState } from "react";
-import { getBrowserSupabaseClient } from "@/lib/supabase/client";
+
 import { formatCurrency } from "@/lib/utils/formatting";
 import { STELLAR_TESTNET } from "@/lib/stellar/testnet";
 
@@ -59,40 +59,12 @@ export function WalletCard({
   };
 
   const persistWalletAddress = async (nextAddress: string | null) => {
-    const supabase = getBrowserSupabaseClient();
-    if (!supabase) return;
-
-    const { data } = await supabase.auth.getSession();
-    const session = data.session;
-    if (!session) return;
-
-    // 1. Save to auth user metadata (used by server components for current user)
-    const nextMetadata = {
-      ...session.user.user_metadata,
-      wallet_address: nextAddress,
-      wallet_network: "stellar-testnet",
-    };
-    const { error: authErr } = await supabase.auth.updateUser({ data: nextMetadata });
-    if (authErr) throw new Error(authErr.message);
-
-    // 2. Mirror into profiles.wallet_address (schema migration adds this column).
-    // Keep this non-fatal in case migration has not yet been applied.
-    const { error: profileErr } = await supabase
-      .from("profiles")
-      .update({ wallet_address: nextAddress })
-      .eq("id", session.user.id);
-
-    if (profileErr) {
-      console.warn("profiles wallet_address sync failed:", profileErr.message);
-    }
-
-    // 3. Legacy local storage compatibility for client-side flows.
+    // Legacy local storage compatibility for client-side flows.
     if (nextAddress) {
       window.localStorage.setItem("wallet_address", nextAddress);
     } else {
       window.localStorage.removeItem("wallet_address");
     }
-
   };
 
   const connectWallet = async () => {

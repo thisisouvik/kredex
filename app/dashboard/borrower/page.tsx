@@ -119,6 +119,7 @@ export default async function BorrowerDashboardPage() {
       }
       currentPath="/dashboard/borrower"
       profilePath="/dashboard/borrower/profile"
+      kycStatus={kycStatus}
       profileSummary={profileNeedsAttention ? {
         completion: verificationProgress,
         kycStatus,

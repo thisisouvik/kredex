@@ -75,7 +75,7 @@ export default function AdminKYCClient({
       return "Unknown";
     }
 
-    return new Date(submittedAt).toLocaleDateString();
+    return new Date(submittedAt).toISOString().split('T')[0];
   };
 
   const isReviewedSelection = selectedDoc ? selectedDoc.kyc_status !== "submitted" : false;
@@ -185,43 +185,38 @@ export default function AdminKYCClient({
                 <div
                   style={{
                     marginBottom: "1rem",
-                    border: "1px solid #e5e7eb",
+                    border: "1px solid rgba(255,255,255,0.1)",
                     borderRadius: "0.5rem",
-                    overflow: "hidden",
-                    backgroundColor: "#f9f9f9",
-                    minHeight: "240px",
+                    padding: "2rem",
+                    textAlign: "center",
+                    backgroundColor: "rgba(255,255,255,0.02)",
                   }}
                 >
-                  {selectedDoc.government_id_url.endsWith(".pdf") ? (
-                    <div style={{ padding: "1rem", textAlign: "center" }}>
-                      <p style={{ marginBottom: "0.5rem" }}>📄 PDF Document</p>
-                      <a
-                        href={selectedDoc.government_id_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          color: "#4f46e5",
-                          textDecoration: "none",
-                          fontSize: "0.85rem",
-                        }}
-                      >
-                        View in IPFS →
-                      </a>
-                    </div>
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element 
-                    <img
-                      src={selectedDoc.government_id_url}
-                      alt="Government ID"
-                      style={{ width: "100%", display: "block" }}
-                      onError={() =>
-                        console.error(
-                          "Failed to load image:",
-                          selectedDoc.government_id_url
-                        )
-                      }
-                    />
-                  )}
+                  <p style={{ marginBottom: "1rem", color: "#a1a1aa" }}>
+                    {selectedDoc.government_id_url.endsWith(".pdf") ? "📄 PDF Document" : "🖼️ Image Document"}
+                  </p>
+                  <a
+                    href={selectedDoc.government_id_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="kyc-external-link"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      backgroundColor: "rgba(79, 70, 229, 0.15)",
+                      color: "#818cf8",
+                      padding: "0.6rem 1.25rem",
+                      borderRadius: "0.4rem",
+                      textDecoration: "none",
+                      fontSize: "0.9rem",
+                      fontWeight: 600,
+                      border: "1px solid rgba(79, 70, 229, 0.3)",
+                      transition: "all 0.2s ease"
+                    }}
+                  >
+                    View Document Externally ↗
+                  </a>
                 </div>
 
                 <div style={{ marginBottom: "1rem" }}>
@@ -380,27 +375,28 @@ export default function AdminKYCClient({
 
         .kyc-doc-row {
           padding: 0.9rem;
-          border: 1px solid #e5e7eb;
+          border: 1px solid rgba(255,255,255,0.1);
           border-radius: 0.6rem;
           cursor: pointer;
-          background: #ffffff;
+          background: rgba(255,255,255,0.03);
           transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
         }
 
         .kyc-doc-row:hover {
-          border-color: #c7d2fe;
+          border-color: rgba(99, 102, 241, 0.5);
+          background: rgba(255,255,255,0.06);
           box-shadow: 0 8px 20px rgba(79, 70, 229, 0.08);
           transform: translateY(-1px);
         }
 
         .is-selected-pending {
           border: 2px solid #4f46e5;
-          background: #eef2ff;
+          background: rgba(79, 70, 229, 0.15);
         }
 
         .is-selected-reviewed {
-          border: 2px solid #94a3b8;
-          background: #f8fafc;
+          border: 2px solid #64748b;
+          background: rgba(255,255,255,0.08);
         }
 
         .kyc-viewer-panel {
@@ -445,10 +441,10 @@ export default function AdminKYCClient({
           align-items: center;
           justify-content: center;
           gap: 1rem;
-          border: 1px dashed #cbd5e1;
+          border: 1px dashed rgba(255,255,255,0.15);
           border-radius: 0.75rem;
           padding: 1.25rem;
-          background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.75));
+          background: rgba(255,255,255,0.02);
         }
 
         .kyc-empty-stats {
@@ -459,9 +455,9 @@ export default function AdminKYCClient({
 
         .kyc-empty-stats span {
           font-size: 0.8rem;
-          color: #334155;
-          background: #e2e8f0;
-          border: 1px solid #cbd5e1;
+          color: rgba(255,255,255,0.8);
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
           border-radius: 999px;
           padding: 0.2rem 0.65rem;
           font-weight: 600;

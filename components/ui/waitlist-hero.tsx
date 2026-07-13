@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Image from "next/image"
-import { getBrowserSupabaseClient } from "@/lib/supabase/client"
+import { joinWaitlist } from "@/app/actions/waitlist"
 import { ArrowRight, User, Mail, CheckCircle2, Loader2 } from "lucide-react"
 
 export const WaitlistHero = () => {
@@ -26,19 +26,10 @@ export const WaitlistHero = () => {
     setErrorMessage("")
 
     try {
-      const supabase = getBrowserSupabaseClient()
-
-      if (!supabase) {
-        throw new Error("Supabase client is not initialized")
-      }
-
-      const { error } = await supabase
-        .from("waitlist")
-        .insert([{ email, full_name: fullName }])
-
-      // 23505 = PostgreSQL unique violation (email already exists)
-      if (error && error.code !== "23505") {
-        throw error
+      const result = await joinWaitlist(email, fullName);
+      
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       setStatus("success")

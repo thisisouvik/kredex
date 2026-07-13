@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServerSupabaseClient, getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import {
   mapToSep12Status,
   buildRequiredFields,
@@ -10,57 +10,49 @@ import {
   type Sep12CustomerResponse,
 } from "@/lib/kyc/sep12";
 
-interface ProfileRow {
-  id: string;
-  full_name?: string | null;
-  phone?: string | null;
-  date_of_birth?: string | null;
-  country_code?: string | null;
-  kyc_status?: string | null;
-  kyc_tier?: number | null;
-  government_id_url?: string | null;
-  kyc_submitted_at?: string | null;
-  kyc_rejection_reason?: string | null;
-}
-
 /**
  * GET /api/kyc/customer
  *
  * SEP-12 compatible endpoint. Returns the KYC status of the authenticated user.
- * Can also be queried by Stellar anchors using ?account=<stellar_address> with
- * an Authorization: Bearer <Kredex_jwt> header.
- *
- * SEP-12 spec: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0012.md
  */
 export async function GET(req: NextRequest) {
   try {
     const { user } = await requireAuthenticatedUser();
-    const supabase = await getServerSupabaseClient();
 
-    if (!supabase) {
-      return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
-    }
+    const profile = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        dateOfBirth: true,
+        countryCode: true,
+        kycStatus: true,
+        kycTier: true,
+        kycIpfsCid: true,
+        kycSubmittedAt: true,
+      }
+    });
 
-    const { data: rawProfile, error } = await supabase
-      .from("profiles")
-      .select(
-        "id, full_name, phone, date_of_birth, country_code, kyc_status, kyc_tier, " +
-        "government_id_url, kyc_submitted_at, kyc_rejection_reason"
-      )
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (error) {
-      console.error("[SEP-12 GET] Supabase error:", error);
+    if (!profile) {
       return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
     }
 
-    const profile = rawProfile as ProfileRow | null;
-    const internalStatus = profile?.kyc_status ?? "pending";
+    const internalStatus = profile.kycStatus ?? "pending";
     const sep12Status = mapToSep12Status(internalStatus);
-    const requiredFields = buildRequiredFields(profile ?? {});
-    const providedFields = buildProvidedFields(profile ?? {});
-    const message = buildStatusMessage(sep12Status, profile?.kyc_rejection_reason);
+    
+    // Map to expected keys for helper functions
+    const mappedProfile = {
+      full_name: profile.fullName,
+      phone: profile.phone,
+      date_of_birth: profile.dateOfBirth?.toISOString(),
+      country_code: profile.countryCode,
+      government_id_url: profile.kycIpfsCid
+    };
+
+    const requiredFields = buildRequiredFields(mappedProfile);
+    const providedFields = buildProvidedFields(mappedProfile);
+    const message = buildStatusMessage(sep12Status, null); // Rejection reason omitted as it's not in schema
 
     const response: Sep12CustomerResponse = {
       id: user.id,
@@ -68,8 +60,7 @@ export async function GET(req: NextRequest) {
       message,
       ...(Object.keys(providedFields).length > 0 && { provided_fields: providedFields }),
       ...(requiredFields && { fields: requiredFields }),
-      // Kredex extensions
-      kyc_tier: Number(profile?.kyc_tier ?? 0),
+      kyc_tier: profile.kycTier ?? 0,
     };
 
     return NextResponse.json(response, {
@@ -89,10 +80,6 @@ export async function GET(req: NextRequest) {
  * PUT /api/kyc/customer
  *
  * SEP-12 compatible endpoint for submitting or updating KYC information.
- * Accepts JSON body with: first_name, last_name (or full_name), birth_date,
- * country_code, phone_number (optional), photo_id_front (optional base64 URL).
- *
- * Sets kycStatus → SUBMITTED and triggers admin review flow.
  */
 export async function PUT(req: NextRequest) {
   try {
@@ -105,7 +92,6 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    // Validate required fields per SEP-12
     const missingFields = validateSep12Payload(body);
     if (missingFields.length > 0) {
       return NextResponse.json(
@@ -119,72 +105,57 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Build full_name from parts if provided separately
     const fullName =
       (body.full_name as string) ??
       `${body.first_name ?? ""} ${body.last_name ?? ""}`.trim();
 
-    const supabase = await getServerSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "Service unavailable" }, { status: 503 });
-    }
+    const existing = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, kycStatus: true }
+    });
 
-    // Check for existing profile
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("id, kyc_status")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    // Don't allow re-submission if already VERIFIED
-    if (existing?.kyc_status === "verified") {
+    if (existing?.kycStatus === "verified") {
       return NextResponse.json(
         {
           id: user.id,
           status: "ACCEPTED",
           message: "Your identity has already been verified.",
-          kyc_tier: 2,
+          kyc_tier: 2, // Could map from DB if using multiple tiers
         },
         { status: 200 }
       );
     }
 
+    const dateStr = (body.birth_date as string) ?? (body.date_of_birth as string);
     const updates: Record<string, unknown> = {
-      full_name: fullName || null,
-      date_of_birth: (body.birth_date as string) ?? (body.date_of_birth as string) ?? null,
-      country_code: (body.country_code as string) ?? null,
+      fullName: fullName || null,
+      dateOfBirth: dateStr ? new Date(dateStr) : null,
+      countryCode: (body.country_code as string) ?? null,
       phone: (body.phone_number as string) ?? (body.phone as string) ?? null,
-      kyc_status: "submitted",
-      kyc_submitted_at: new Date().toISOString(),
+      kycStatus: "submitted",
+      kycSubmittedAt: new Date(),
     };
 
-    // If a photo_id_front URL is provided (e.g. after a separate upload)
     if (body.photo_id_front && typeof body.photo_id_front === "string") {
-      updates.government_id_url = body.photo_id_front;
+      // In this system, kycIpfsCid usually holds the CID. 
+      // If a full URL is passed here, we store it.
+      updates.kycIpfsCid = body.photo_id_front;
     }
 
-    const { error: upsertError } = await supabase
-      .from("profiles")
-      .upsert({ id: user.id, ...updates }, { onConflict: "id" });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updates
+    });
 
-    if (upsertError) {
-      console.error("[SEP-12 PUT] Upsert error:", upsertError);
-      return NextResponse.json({ error: "Failed to save KYC data" }, { status: 500 });
-    }
-
-    // Notify admin via service role (create notification) — fire and forget
-    const srClient = getServiceRoleClient();
-    if (srClient) {
-      void Promise.resolve(
-        srClient.from("notifications").insert({
-          user_id: user.id,
-          type: "kyc_submitted",
-          title: "KYC Submitted",
-          message: `${fullName} has submitted identity documents for review.`,
-          read: false,
-          created_at: new Date().toISOString(),
-        })
-      ).catch(() => {});
+    // Notify admin
+    const adminUser = await prisma.user.findFirst({ where: { role: "admin" }});
+    if (adminUser) {
+      const { createNotification } = await import("@/lib/notifications");
+      await createNotification({
+        userId: adminUser.id,
+        title: "KYC Submitted",
+        message: `${fullName} has submitted identity documents for review.`,
+      });
     }
 
     const response: Sep12CustomerResponse = {
@@ -195,7 +166,7 @@ export async function PUT(req: NextRequest) {
     };
 
     return NextResponse.json(response, { status: 202 });
-  } catch {
+  } catch (_err) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 }

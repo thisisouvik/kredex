@@ -17,6 +17,7 @@ export function LoanApplicationForm({ maxAmount, onSubmit }: LoanApplicationForm
   const [duration, setDuration] = useState("60");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,14 +31,41 @@ export function LoanApplicationForm({ maxAmount, onSubmit }: LoanApplicationForm
         return;
       }
       await onSubmit(amountNum, parseInt(duration));
-      setAmount("");
-      setDuration("60");
+      setIsSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit application");
     } finally {
       setLoading(false);
     }
   };
+
+  if (isSuccess) {
+    return (
+      <div className="workspace-form" style={{ textAlign: "center", padding: "2rem 1rem" }}>
+        <div style={{ 
+          width: 64, height: 64, borderRadius: "50%", background: "var(--green-alpha)", 
+          color: "var(--green-light)", display: "flex", alignItems: "center", justifyContent: "center", 
+          margin: "0 auto 1rem", fontSize: "2rem" 
+        }}>
+          ✓
+        </div>
+        <h3 className="heading-md" style={{ marginBottom: "0.5rem" }}>Application Submitted!</h3>
+        <p className="text-secondary" style={{ marginBottom: "1.5rem" }}>
+          Your request for <strong>{amount} XLM</strong> is now live in the marketplace. You will be notified once a lender funds your loan.
+        </p>
+        <button
+          onClick={() => {
+            setIsSuccess(false);
+            setAmount("");
+            setDuration("60");
+          }}
+          className="workspace-button workspace-button--primary"
+        >
+          Apply for Another Loan
+        </button>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="workspace-form">
@@ -203,6 +231,7 @@ interface BorrowerLoan {
   apr_bps?: number;
   duration_days?: number;
   created_at?: string | null;
+  tx_hash?: string | null;
 }
 
 interface BorrowerFormsProps {
@@ -371,7 +400,12 @@ export function BorrowerForms({
         ) : (
           <>
             <p className="workspace-card-copy">Loan #{String(selectedRepaymentLoan.id).slice(0, 8)}</p>
-            <p className="workspace-card-copy">Still owe: {formatCurrency(dueAmount)}</p>
+            {selectedRepaymentLoan.tx_hash && (
+              <p className="workspace-card-copy" style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "0.2rem" }}>
+                Tx: <a href={`https://stellar.expert/explorer/testnet/tx/${selectedRepaymentLoan.tx_hash}`} target="_blank" rel="noreferrer" style={{ textDecoration: "underline", color: "var(--indigo-light)" }}>{selectedRepaymentLoan.tx_hash.slice(0, 8)}...{selectedRepaymentLoan.tx_hash.slice(-8)}</a>
+              </p>
+            )}
+            <p className="workspace-card-copy" style={{ marginTop: "0.5rem" }}>Still owe: {formatCurrency(dueAmount)}</p>
             <p className="workspace-card-copy">
               Next due: {selectedRepaymentLoan.due_at ? new Date(String(selectedRepaymentLoan.due_at)).toLocaleDateString() : "-"}
             </p>

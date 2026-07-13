@@ -1,27 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import prisma from "@/lib/prisma";
 
 export async function POST(_request: NextRequest) {
   try {
-    const supabase = await getServerSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "DB unavailable" }, { status: 503 });
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const session = await getAuthenticatedUser();
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Delete all notifications for this user
-    const { error } = await supabase
-      .from("notifications")
-      .delete()
-      .eq("user_id", user.id);
+    const userId = session.user.id;
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    // Delete all notifications for this user
+    await prisma.notification.deleteMany({
+      where: { userId }
+    });
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (_error) {

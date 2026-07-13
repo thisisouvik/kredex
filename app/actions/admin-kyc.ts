@@ -5,86 +5,55 @@
  * Only admins can verify/reject user identity documents
  */
 
-import { getServerSupabaseClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
+import { getAuthenticatedUser } from "@/lib/auth/session";
+import { PINATA_GATEWAY } from "@/lib/ipfs/pinata";
 
 export async function verifyKYCDocument(
   userId: string,
   approved: boolean,
-  rejectionReason?: string
+  _rejectionReason?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = await getServerSupabaseClient();
-    if (!supabase) {
-      return { success: false, error: "Supabase not available" };
-    }
+    const session = await getAuthenticatedUser();
+    if (!session) return { success: false, error: "Not authenticated" };
 
-    // Verify admin status
-    const { data: adminUser, error: authError } = await supabase.auth.getUser();
-    if (authError || !adminUser?.user) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    // Check if requester is admin
-    const { data: adminProfile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", adminUser.user.id)
-      .maybeSingle();
-
-    if (adminProfile?.role !== "admin") {
+    const ADMIN_WALLET = process.env.ADMIN_WALLET_ADDRESS;
+    if (!ADMIN_WALLET || session.user.wallet !== ADMIN_WALLET) {
       return { success: false, error: "Unauthorized: Admin access required" };
     }
 
-    // Update KYC status
-    const updateData = approved
+    const updateData: Record<string, unknown> = approved
       ? {
-          kyc_status: "verified",
-          kyc_verified_at: new Date().toISOString(),
-          kyc_rejection_reason: null,
+          kycStatus: "verified",
+          kycTier: 1,
         }
       : {
-          kyc_status: "rejected",
-          kyc_rejection_reason: rejectionReason || "Document does not meet requirements",
+          kycStatus: "rejected",
+          // The schema doesn't have kycRejectionReason, but we can notify the user via another channel
         };
 
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update(updateData)
-      .eq("id", userId);
-
-    if (updateError) throw updateError;
-
-    // When KYC is approved, seed an initial reputation score from real profile fields.
+    // When KYC is approved, calculate an initial reputation score.
     if (approved) {
-      const { data: userProfile } = await supabase
-        .from("profiles")
-        .select("full_name, phone, country_code")
-        .eq("id", userId)
-        .maybeSingle();
-
-      let initialScore = 70;
-      if (userProfile?.full_name?.trim()) initialScore += 15;
-      if (userProfile?.phone?.trim()) initialScore += 15;
-      if (userProfile?.country_code?.trim()) initialScore += 10;
-
-      const { error: reputationError } = await supabase.rpc("seed_reputation_snapshot", {
-        p_user_id: userId,
-        p_initial_score: initialScore,
+      const userProfile = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { fullName: true, phone: true, dateOfBirth: true }
       });
 
-      if (reputationError) {
-        throw reputationError;
-      }
-
-      console.log(
-        `[Kredex] Reputation snapshot seeded for ${userId}: score=${initialScore}`
-      );
+      let initialScore = 70;
+      if (userProfile?.fullName?.trim()) initialScore += 15;
+      if (userProfile?.phone?.trim()) initialScore += 15;
+      if (userProfile?.dateOfBirth) initialScore += 10;
+      
+      updateData.reputationScore = initialScore;
     }
 
+    await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
 
-    console.log(
-      `✅ KYC ${approved ? "approved" : "rejected"} for user ${userId}`
-    );
+    console.log(`✅ KYC ${approved ? "approved" : "rejected"} for user ${userId}`);
     return { success: true };
   } catch (error) {
     console.error("❌ KYC verification failed:", error);
@@ -106,63 +75,44 @@ export async function getPendingKYCDocuments(): Promise<
   }> | null
 > {
   try {
-    const supabase = await getServerSupabaseClient();
-    if (!supabase) return null;
+    const session = await getAuthenticatedUser();
+    if (!session) return null;
 
-    // Verify admin
-    const { data: adminUser } = await supabase.auth.getUser();
-    if (!adminUser?.user) return null;
-
-    const { data: adminProfile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", adminUser.user.id)
-      .maybeSingle();
-
-    if (adminProfile?.role !== "admin") return null;
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, kyc_status, government_id_ipfs_hash, government_id_url, kyc_submitted_at")
-      .in("kyc_status", ["submitted", "verified", "rejected"])
-      .order("kyc_submitted_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching KYC documents:", error);
+    const ADMIN_WALLET = process.env.ADMIN_WALLET_ADDRESS;
+    if (!ADMIN_WALLET || session.user.wallet !== ADMIN_WALLET) {
       return null;
     }
 
-    // Generate signed URLs for each profile document path.
-    const docsWithEmail = await Promise.all(
-      (data || []).map(async (doc) => {
-        let viewUrl = doc.government_id_url;
-        if (doc.government_id_ipfs_hash) {
-           const { data: signedData } = await supabase.storage
-             .from("kyc-documents")
-             .createSignedUrl(doc.government_id_ipfs_hash, 3600);
-           
-           if (signedData?.signedUrl) {
-             viewUrl = signedData.signedUrl;
-           }
-        }
+    const data = await prisma.user.findMany({
+      where: {
+        kycStatus: { in: ["submitted", "verified", "rejected"] }
+      },
+      select: {
+        id: true,
+        fullName: true,
+        kycStatus: true,
+        kycIpfsCid: true,
+        kycSubmittedAt: true,
+      },
+      orderBy: { kycSubmittedAt: "desc" }
+    });
 
-        return {
-           ...doc,
-            email: "hidden",
-           submitted_at: doc.kyc_submitted_at || "",
-           government_id_url: viewUrl || "",
-        };
-      })
-    );
+    // Map Prisma models to the expected return type
+    const docs = data.map((doc) => {
+      // Pinata gateway URL structure for the frontend
+      const viewUrl = doc.kycIpfsCid ? `${PINATA_GATEWAY}/ipfs/${doc.kycIpfsCid}` : "";
 
-    return docsWithEmail as Array<{
-      id: string;
-      email: string;
-      full_name: string;
-      kyc_status: string;
-      government_id_url: string;
-      submitted_at: string;
-    }>;
+      return {
+        id: doc.id,
+        email: "hidden", // We dropped email storage to focus on wallet auth
+        full_name: doc.fullName || "Unknown",
+        kyc_status: doc.kycStatus || "pending",
+        government_id_url: viewUrl,
+        submitted_at: doc.kycSubmittedAt ? doc.kycSubmittedAt.toISOString() : new Date().toISOString(),
+      };
+    });
+
+    return docs;
   } catch (error) {
     console.error("❌ Failed to fetch KYC documents:", error);
     return null;

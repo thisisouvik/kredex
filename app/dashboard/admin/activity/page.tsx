@@ -6,7 +6,7 @@ import {
   getAdminDashboardMetrics,
   presentAdminMetrics,
 } from "@/lib/dashboard/metrics";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import {
   buildStellarTxVerificationUrl,
   extractPossibleTxHash,
@@ -35,14 +35,11 @@ export default async function AdminActivityPage() {
   const walletAddress = String(user.user_metadata?.wallet_address ?? "") || null;
   const walletConnected = Boolean(walletAddress);
 
-  const srClient = getServiceRoleClient();
-  const { data: ledgerRows } = srClient
-    ? await srClient
-        .from("ledger_transactions")
-        .select("id, user_id, amount, category, status, created_at, metadata")
-        .order("created_at", { ascending: false })
-        .limit(500)
-    : { data: [] as Array<Record<string, unknown>> };
+  const ledgerRows = await prisma.ledgerTransaction.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: { id: true, userId: true, amount: true, refType: true, status: true, createdAt: true, metadata: true, txHash: true }
+  }).catch(() => []);
 
   const rows = ledgerRows ?? [];
 
@@ -58,7 +55,7 @@ export default async function AdminActivityPage() {
 
   const amounts = rows.map((row) => ({
     amount: Number(row.amount ?? 0),
-    createdAt: String(row.created_at ?? ""),
+    createdAt: String(row.createdAt ?? ""),
   }));
 
   const today = sumByPeriod(amounts, todayStart);
@@ -68,7 +65,7 @@ export default async function AdminActivityPage() {
 
   const topUsersMap = new Map<string, number>();
   for (const row of rows) {
-    const userId = String(row.user_id ?? "");
+    const userId = String(row.userId ?? "");
     const amount = Number(row.amount ?? 0);
     if (!userId) {
       continue;
@@ -82,14 +79,18 @@ export default async function AdminActivityPage() {
 
   const chainRows = rows
     .map((row) => {
-      const txHash = extractPossibleTxHash(row.metadata);
+      // Prioritize top-level txHash, fallback to metadata parsing if needed
+      let txHash = row.txHash ?? null;
+      if (!txHash) {
+        txHash = extractPossibleTxHash(row.metadata) ?? null;
+      }
       return {
         id: String(row.id),
-        userId: String(row.user_id ?? ""),
+        userId: String(row.userId ?? ""),
         amount: Number(row.amount ?? 0),
-        category: String(row.category ?? "unknown"),
+        category: String(row.refType ?? "unknown"),
         status: String(row.status ?? "pending"),
-        createdAt: String(row.created_at ?? ""),
+        createdAt: String(row.createdAt ?? ""),
         txHash,
       };
     })

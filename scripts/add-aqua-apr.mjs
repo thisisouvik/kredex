@@ -1,8 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import pkg from '@next/env';
 const { loadEnvConfig } = pkg;
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 const projectDir = process.cwd();
 loadEnvConfig(projectDir);

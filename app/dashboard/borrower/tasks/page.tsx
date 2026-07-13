@@ -3,40 +3,37 @@ import { TasksBoard } from "@/components/dashboard/TasksBoard";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getBorrowerDashboardMetrics, presentBorrowerMetrics } from "@/lib/dashboard/metrics";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { getPlatformTasks } from "@/app/api/tasks/complete/route";
 
 export default async function BorrowerTasksPage() {
-  const { user } = await requireAuthenticatedUser("borrower");
+  const session = await requireAuthenticatedUser();
+  const user = session.user;
   const metrics = await getBorrowerDashboardMetrics(user.id);
-  const supabase = getServiceRoleClient();
 
-  const [profileRes, completedEventsRes] = supabase
-    ? await Promise.all([
-        supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .maybeSingle(),
-        // Which tasks has this user already completed?
-        supabase
-          .from("reputation_events")
-          .select("source_key, source_id")
-          .eq("user_id", user.id)
-          .eq("source_type", "task_completion"),
-      ])
-    : [{ data: null }, { data: [] }];
+  const [profile, completedEventsRes] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { fullName: true }
+    }),
+    prisma.notification.findMany({
+      where: {
+        userId: user.id,
+        message: { startsWith: "Completed task:" }
+      },
+      select: { title: true } // title holds the taskId
+    })
+  ]);
 
-  const profile          = profileRes.data;
   const completedTaskIds = new Set(
-    (completedEventsRes.data ?? []).map((e) => String(e.source_key ?? e.source_id ?? ""))
+    completedEventsRes.map((e) => e.title)
   );
-  const currentScore     = metrics.reputationScore;
+  
+  const currentScore = metrics.reputationScore;
 
-  // Merge completion status into the canonical task list
   const platformTasks = getPlatformTasks().map((t) => ({
     ...t,
-    learnUrl:  t.learnUrl ?? null,
+    learnUrl: t.learnUrl ?? null,
     completed: completedTaskIds.has(t.id),
   }));
 
@@ -45,14 +42,13 @@ export default async function BorrowerTasksPage() {
       roleLabel="Borrower Dashboard"
       heading="Trust Tasks"
       description="Complete these tasks to build your trust score. Higher score = better loan terms and higher limits."
-      email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      email={null}
+      userName={user.user_metadata?.full_name ?? profile?.fullName ?? ""}
       metrics={presentBorrowerMetrics(metrics)}
       currentPath="/dashboard/borrower/tasks"
       links={borrowerNavLinks}
     >
       <div className="workspace-stack">
-        {/* How the score works */}
         <article
           className="workspace-card workspace-card--full"
           style={{ background: "rgba(126,47,208,0.05)", border: "1px solid rgba(126,47,208,0.15)" }}
@@ -91,7 +87,6 @@ export default async function BorrowerTasksPage() {
           </div>
         </article>
 
-        {/* Interactive tasks board */}
         <TasksBoard tasks={platformTasks} currentScore={currentScore} />
       </div>
     </WorkspaceFrame>

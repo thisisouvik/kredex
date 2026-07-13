@@ -235,3 +235,11 @@ model InsuranceEvent {
 
   @@map("insurance_events")
 }
+
+model Waitlist {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  fullName  String?
+  createdAt DateTime @default(now())
+}
+

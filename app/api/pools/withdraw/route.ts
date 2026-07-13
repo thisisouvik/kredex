@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 
 export async function POST(request: NextRequest) {
   try {
-    const { user } = await requireAuthenticatedUser("lender");
+    const { user } = await requireAuthenticatedUser();
     const { positionId, amount } = await request.json();
 
     if (!positionId || !amount || amount <= 0 || !Number.isFinite(amount)) {
@@ -15,87 +15,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Amount exceeds maximum allowed" }, { status: 400 });
     }
 
-    const supabase = getServiceRoleClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "Database unavailable" }, { status: 500 });
-    }
+    const position = await prisma.poolPosition.findFirst({
+      where: {
+        id: positionId,
+        lenderId: user.id,
+        status: "active"
+      }
+    });
 
-    // Get position and verify ownership
-    const { data: position, error: positionError } = await supabase
-      .from("pool_positions")
-      .select("id, pool_id, principal_amount, withdrawn_amount")
-      .eq("id", positionId)
-      .eq("lender_id", user.id)
-      .eq("status", "active")
-      .single();
-
-    if (positionError || !position) {
+    if (!position) {
       return NextResponse.json({ error: "Position not found" }, { status: 404 });
     }
 
-    if (amount > position.principal_amount) {
+    const withdrawStroops = BigInt(Math.floor(amount * 10_000_000));
+
+    if (withdrawStroops > position.principalAmount) {
       return NextResponse.json(
         { error: "Withdrawal amount exceeds principal" },
         { status: 400 }
       );
     }
 
-    // Get pool
-    const { data: pool, error: poolError } = await supabase
-      .from("lending_pools")
-      .select("id, total_liquidity, available_liquidity")
-      .eq("id", position.pool_id)
-      .single();
+    const pool = await prisma.pool.findUnique({
+      where: { id: position.poolId }
+    });
 
-    if (poolError || !pool) {
+    if (!pool) {
       return NextResponse.json({ error: "Pool not found" }, { status: 404 });
     }
 
-    if (amount > pool.available_liquidity) {
+    if (withdrawStroops > pool.totalLiquidity) {
       return NextResponse.json(
         { error: "Insufficient liquidity in pool for withdrawal" },
         { status: 400 }
       );
     }
 
-    // Update position
-    const newPrincipal = position.principal_amount - amount;
-    const { error: updateError } = await supabase
-      .from("pool_positions")
-      .update({
-        principal_amount: newPrincipal,
-        withdrawn_amount: (position.withdrawn_amount || 0) + amount,
-        status: newPrincipal === 0 ? "closed" : "active",
-        closed_at: newPrincipal === 0 ? new Date().toISOString() : null,
-      })
-      .eq("id", positionId);
+    const newPrincipal = position.principalAmount - withdrawStroops;
 
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
+    await prisma.poolPosition.update({
+      where: { id: positionId },
+      data: {
+        principalAmount: newPrincipal,
+        status: newPrincipal === 0n ? "withdrawn" : "active",
+        updatedAt: new Date(),
+      }
+    });
 
-    // Update pool liquidity
-    const { error: poolUpdateError } = await supabase
-      .from("lending_pools")
-      .update({
-        total_liquidity: pool.total_liquidity - amount,
-        available_liquidity: pool.available_liquidity - amount,
-      })
-      .eq("id", position.pool_id);
+    await prisma.pool.update({
+      where: { id: position.poolId },
+      data: {
+        totalLiquidity: pool.totalLiquidity - withdrawStroops,
+      }
+    });
 
-    if (poolUpdateError) {
-      return NextResponse.json({ error: poolUpdateError.message }, { status: 500 });
-    }
-
-    // Record transaction
-    await supabase.from("ledger_transactions").insert({
-      user_id: user.id,
-      category: "withdrawal",
-      amount: amount,
-      currency: "XLM",
-      status: "confirmed",
-      ref_type: "pool_position",
-      ref_id: positionId,
+    await prisma.ledgerTransaction.create({
+      data: {
+        userId: user.id,
+        amount: withdrawStroops,
+        status: "confirmed",
+        refType: "pool_withdraw",
+        refId: positionId,
+        metadata: {
+          currency: "XLM"
+        }
+      }
     });
 
     return NextResponse.json(
@@ -103,9 +87,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    if (isRedirectError(error)) {
-      throw error;
-    }
+    if (isRedirectError(error)) throw error;
     console.error("Withdrawal error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

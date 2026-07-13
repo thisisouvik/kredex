@@ -97,9 +97,20 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
           select: { role: true, email: true, fullName: true },
         });
         if (profile) {
-          userRole = profile.role || decoded.role || "borrower";
+          const isAdminWallet = process.env.ADMIN_WALLET_ADDRESS && decoded.wallet === process.env.ADMIN_WALLET_ADDRESS;
+          userRole = isAdminWallet ? "admin" : (profile.role || decoded.role || "borrower");
           userEmail = profile.email ?? "";
           fullName = profile.fullName ?? "Wallet User";
+
+          // Auto-upgrade DB role if they are the admin but not marked as admin
+          if (isAdminWallet && profile.role !== "admin") {
+            try {
+              await prisma.user.update({
+                where: { id: decoded.sub },
+                data: { role: "admin" }
+              });
+            } catch { /* ignore */ }
+          }
         }
       } catch (dbErr) {
         console.error("[session] DB fetch failed (non-fatal):", dbErr);

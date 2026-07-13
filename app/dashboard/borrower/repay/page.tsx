@@ -3,57 +3,48 @@ import { BorrowerRepayWidget } from "@/components/dashboard/BorrowerRepayWidget"
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { getBorrowerDashboardMetrics, presentBorrowerMetrics } from "@/lib/dashboard/metrics";
 import { borrowerNavLinks } from "@/lib/dashboard/borrower-links";
-import { getServiceRoleClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
 import { Badge } from "@/components/ui/Badge";
 
 export default async function BorrowerRepayPage() {
-  const { user } = await requireAuthenticatedUser("borrower");
+  const session = await requireAuthenticatedUser();
+  const user = session.user;
   const metrics  = await getBorrowerDashboardMetrics(user.id);
 
-  const supabase = getServiceRoleClient();
-  const [loansRes, profileRes] = supabase
-    ? await Promise.all([
-        supabase
-          .from("loans")
-          .select("id, status, principal_amount, repaid_amount, apr_bps, duration_days, due_at, created_at")
-          .eq("borrower_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(20),
-        supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .maybeSingle(),
-      ])
-    : [{ data: [] }, { data: null }];
+  const [loans, profile] = await Promise.all([
+    prisma.loan.findMany({
+      where: { borrowerId: user.id },
+      select: { id: true, status: true, principalAmount: true, repaidAmount: true, aprBps: true, durationDays: true, dueAt: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 20
+    }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { fullName: true }
+    })
+  ]);
 
-  const loans   = loansRes.data ?? [];
-  const profile = profileRes.data;
+  const loanIds = loans.map((l) => l.id);
+  const fundedLedgerRes = loanIds.length > 0
+    ? await prisma.ledgerTransaction.findMany({
+        where: { refType: "loan_fund", refId: { in: loanIds } },
+        select: { refId: true }
+      })
+    : [];
 
-  const loanIds = loans.map((l) => String(l.id));
-  const fundedLedgerRes = supabase && loanIds.length > 0
-    ? await supabase
-        .from("ledger_transactions")
-        .select("ref_id")
-        .eq("ref_type", "loan_fund")
-        .in("ref_id", loanIds)
-    : { data: [] };
-
-  const fundedLoanIds = new Set((fundedLedgerRes.data ?? []).map((row) => String(row.ref_id)));
+  const fundedLoanIds = new Set(fundedLedgerRes.map((row) => row.refId));
   const normalizedLoans = loans.map((loan) => {
-    const status = String(loan.status ?? "requested");
-    const effectiveStatus = status === "requested" && fundedLoanIds.has(String(loan.id)) ? "funded" : status;
+    const status = loan.status;
+    const effectiveStatus = status === "requested" && loan.id && fundedLoanIds.has(loan.id) ? "funded" : status;
     return { ...loan, status: effectiveStatus };
   });
 
-  // Repayable = any loan that has been funded/disbursed (not yet repaid or defaulted)
-  // Statuses: "funded" (just funded by lender), "active" (repayment in progress)
   const REPAYABLE_STATUSES = ["active", "funded", "approved"];
-  const repayableLoans = normalizedLoans.filter((l) => REPAYABLE_STATUSES.includes(String(l.status)));
+  const repayableLoans = normalizedLoans.filter((l) => REPAYABLE_STATUSES.includes(l.status));
   const repayableLoan  = repayableLoans[0] ?? null;
-  const pendingLoans = normalizedLoans.filter((l) => String(l.status) === "requested");
+  const pendingLoans = normalizedLoans.filter((l) => l.status === "requested");
   const dueAmount = repayableLoan
-    ? Math.max(0, Number(repayableLoan.principal_amount ?? 0) - Number(repayableLoan.repaid_amount ?? 0))
+    ? Math.max(0, Number(repayableLoan.principalAmount) / 10_000_000 - Number(repayableLoan.repaidAmount ?? 0) / 10_000_000)
     : 0;
 
   return (
@@ -61,8 +52,8 @@ export default async function BorrowerRepayPage() {
       roleLabel="Borrower Dashboard"
       heading="Repay Loan"
       description="Make a repayment on your active loan. Each repayment increases your Trust Score."
-      email={user.email ?? null}
-      userName={String(user.user_metadata?.full_name ?? profile?.full_name ?? "")}
+      email={null}
+      userName={user.user_metadata?.full_name ?? profile?.fullName ?? ""}
       metrics={presentBorrowerMetrics(metrics)}
       currentPath="/dashboard/borrower/repay"
       links={borrowerNavLinks}
@@ -73,7 +64,7 @@ export default async function BorrowerRepayPage() {
             <div style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>✅</div>
             <h2 className="workspace-card-title">No Active Loans</h2>
             <p className="workspace-card-copy" style={{ marginTop: "0.4rem" }}>
-              {loans.some((l) => ["requested"].includes(String(l.status)))
+              {loans.some((l) => ["requested"].includes(l.status))
                 ? "Your loan request is pending lender funding. Repayment will be available once a lender funds it."
                 : "You have no loans to repay. Apply for a new loan using the 'Apply for Loan' section."}
             </p>
@@ -83,7 +74,6 @@ export default async function BorrowerRepayPage() {
           </article>
         ) : (
           <>
-            {/* Trust score incentive */}
             <article className="workspace-card workspace-card--full" style={{ background: "rgba(34,207,157,0.04)", borderColor: "rgba(34,207,157,0.2)" }}>
               <p style={{ fontSize: "0.875rem", color: "#20bd8e", fontWeight: 600, margin: 0 }}>
                 💡 Each on-time repayment earns you <strong>+5 Trust Points</strong>. Fully repaying earns <strong>+20 points</strong> and increases your credit limit.
@@ -92,15 +82,14 @@ export default async function BorrowerRepayPage() {
 
             <BorrowerRepayWidget
               loan={{
-                id: String(repayableLoan.id),
-                principal_amount: Number(repayableLoan.principal_amount),
-                repaid_amount: Number(repayableLoan.repaid_amount ?? 0),
-                due_at: repayableLoan.due_at ? String(repayableLoan.due_at) : null,
+                id: repayableLoan.id,
+                principal_amount: Number(repayableLoan.principalAmount) / 10_000_000,
+                repaid_amount: Number(repayableLoan.repaidAmount ?? 0) / 10_000_000,
+                due_at: repayableLoan.dueAt ? repayableLoan.dueAt.toISOString() : null,
               }}
               dueAmount={dueAmount}
             />
 
-            {/* All loans history */}
             {normalizedLoans.length > 1 && (
               <article className="workspace-card workspace-card--full">
                 <h2 className="workspace-card-title" style={{ marginBottom: "1rem" }}>Loan History</h2>
@@ -115,20 +104,20 @@ export default async function BorrowerRepayPage() {
                     </thead>
                     <tbody>
                       {normalizedLoans.map((loan) => (
-                        <tr key={String(loan.id)} style={{ borderBottom: "1px solid #f9fafb" }}>
-                          <td style={{ padding: "0.75rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b7280" }}>{String(loan.id).slice(0, 8)}</td>
-                          <td style={{ padding: "0.75rem", fontWeight: 700 }}>{Number(loan.principal_amount).toFixed(2)} XLM</td>
+                        <tr key={loan.id} style={{ borderBottom: "1px solid #f9fafb" }}>
+                          <td style={{ padding: "0.75rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b7280" }}>{loan.id.slice(0, 8)}</td>
+                          <td style={{ padding: "0.75rem", fontWeight: 700 }}>{(Number(loan.principalAmount) / 10_000_000).toFixed(2)} XLM</td>
                           <td style={{ padding: "0.75rem" }}>
                             <Badge variant={
                               (loan.status === "active" || loan.status === "funded") ? "green"  :
                               loan.status === "repaid"    ? "gold"   :
                               loan.status === "requested" ? "yellow" : "blue"
                             }>
-                              {String(loan.status).toUpperCase()}
+                              {loan.status.toUpperCase()}
                             </Badge>
                           </td>
-                          <td style={{ padding: "0.75rem" }}>{Number(loan.repaid_amount ?? 0).toFixed(2)} XLM</td>
-                          <td style={{ padding: "0.75rem" }}>{loan.due_at ? new Date(String(loan.due_at)).toLocaleDateString() : "—"}</td>
+                          <td style={{ padding: "0.75rem" }}>{(Number(loan.repaidAmount ?? 0) / 10_000_000).toFixed(2)} XLM</td>
+                          <td style={{ padding: "0.75rem" }}>{loan.dueAt ? loan.dueAt.toLocaleDateString() : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -148,7 +137,7 @@ export default async function BorrowerRepayPage() {
             <div style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
               {pendingLoans.slice(0, 3).map((loan) => (
                 <div
-                  key={String(loan.id)}
+                  key={loan.id}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -162,13 +151,13 @@ export default async function BorrowerRepayPage() {
                   }}
                 >
                   <div>
-                    <p style={{ fontWeight: 700, margin: 0 }}>Loan #{String(loan.id).slice(0, 8)}</p>
+                    <p style={{ fontWeight: 700, margin: 0 }}>Loan #{loan.id.slice(0, 8)}</p>
                     <p style={{ fontSize: "0.8rem", color: "#6b7280", margin: "0.15rem 0 0" }}>
-                      Requested {loan.created_at ? new Date(String(loan.created_at)).toLocaleDateString() : "recently"}
+                      Requested {loan.createdAt ? loan.createdAt.toLocaleDateString() : "recently"}
                     </p>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <p style={{ margin: 0, fontWeight: 800, color: "#7e2fd0" }}>{Number(loan.principal_amount ?? 0).toFixed(2)} XLM</p>
+                    <p style={{ margin: 0, fontWeight: 800, color: "#7e2fd0" }}>{(Number(loan.principalAmount ?? 0) / 10_000_000).toFixed(2)} XLM</p>
                     <p style={{ fontSize: "0.75rem", color: "#f59e0b", fontWeight: 700, margin: "0.15rem 0 0" }}>REQUESTED</p>
                   </div>
                 </div>
