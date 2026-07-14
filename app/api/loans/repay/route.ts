@@ -66,8 +66,9 @@ export async function POST(request: NextRequest) {
        } catch { /* ignore */ }
     }
 
-    // Calculate updated balances
-    const newRepaidAmount = Number(loan.repaidAmount || 0) + amount;
+    // Calculate updated balances (keep exact precision for logic, round for DB BigInt)
+    const exactNewRepaidAmount = Number(loan.repaidAmount || 0) + amount;
+    const newRepaidAmount = BigInt(Math.round(exactNewRepaidAmount));
     
     // Total due calculation matches preflight
     const principal    = Number(loan.principalAmount ?? 0);
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     let newStatus = loan.status === "funded" ? "active" : loan.status;
     // adding a small tolerance for floating point rounding issues
-    if (newRepaidAmount >= totalDue - 0.0001) {
+    if (exactNewRepaidAmount >= totalDue - 0.0001) {
       newStatus = "repaid";
     } else if (newStatus !== "active") {
       newStatus = "active";
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.id, // the borrower
         loanId: loanId,
-        amount: amount,
+        amount: BigInt(Math.round(amount)),
         status: "confirmed",
         refType: "loan_repay",
         txHash: txHash,
@@ -109,7 +110,8 @@ export async function POST(request: NextRequest) {
           lenderUserId,
           loanId,
           principalAmount: Number(loan.principalAmount),
-          repaidSoFar: newRepaidAmount,
+          exactAmountPaid: amount,
+          repaidSoFar: exactNewRepaidAmount,
           repaidAt: new Date().toISOString(),
         }
       }

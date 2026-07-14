@@ -43,7 +43,7 @@ export async function requireAuthenticatedUser(expectedRole?: string) {
             full_name: `Dev Bypass ${bypassRole}`,
             wallet_address: "GBYPASSADDRESS0000000000000000000000000000000000000000000"
           },
-          email_confirmed_at: "",
+          email_confirmed_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
           last_sign_in_at: new Date().toISOString(),
         },

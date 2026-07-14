@@ -387,34 +387,40 @@ export function LenderForms({ pools, positions, platformAddress }: LenderFormsPr
         
         {successTx && (
           <div style={{
-            position: "absolute", top: "-1.5rem", left: "50%", transform: "translateX(-50%)", zIndex: 10,
-            background: "linear-gradient(135deg, rgba(34,207,157,0.1), rgba(34,207,157,0.2))",
-            border: "1px solid rgba(34,207,157,0.4)",
-            borderRadius: "0.8rem", padding: "1rem 1.5rem",
-            boxShadow: "0 8px 32px rgba(34,207,157,0.15)",
-            backdropFilter: "blur(12px)", minWidth: "300px", textAlign: "center",
-            animation: "slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)"
           }}>
-             <h4 style={{ color: "#22cf9d", margin: "0 0 0.5rem 0", fontSize: "1rem" }}>✅ Deposit Successful!</h4>
-             <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.85rem", opacity: 0.9 }}>
-                You successfully deployed <strong>{successTx.amount} XLM</strong> into the <strong>{successTx.poolName}</strong>.
-             </p>
-             <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
-               <a 
-                 href={`https://stellar.expert/explorer/testnet/tx/${successTx.hash}`} 
-                 target="_blank" rel="noopener noreferrer"
-                 className="workspace-nav-link"
-                 style={{ background: "rgba(34,207,157,0.15)", padding: "0.4rem 0.8rem", borderRadius: "9999px", fontSize: "0.8rem", fontWeight: 600, color: "#22cf9d" }}
-               >
-                 Verify on Stellar ↗
-               </a>
-               <button 
-                 onClick={() => setSuccessTx(null)}
-                 style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "white", padding: "0.4rem 0.8rem", borderRadius: "9999px", fontSize: "0.8rem", cursor: "pointer" }}
-               >
-                 Dismiss
-               </button>
-             </div>
+            <div style={{
+              background: "linear-gradient(135deg, rgba(34,207,157,0.15), rgba(34,207,157,0.25))",
+              backgroundColor: "#0d1117",
+              border: "1px solid rgba(34,207,157,0.4)",
+              borderRadius: "0.8rem", padding: "1.5rem 2rem",
+              boxShadow: "0 8px 32px rgba(34,207,157,0.25)",
+              minWidth: "320px", textAlign: "center",
+              animation: "slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+            }}>
+               <h4 style={{ color: "#22cf9d", margin: "0 0 0.75rem 0", fontSize: "1.2rem" }}>✅ Deposit Successful!</h4>
+               <p style={{ margin: "0 0 1rem 0", fontSize: "0.9rem", opacity: 0.9, color: "white" }}>
+                  You successfully deployed <strong>{successTx.amount} XLM</strong> into the <strong>{successTx.poolName}</strong>.
+               </p>
+               <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
+                 <a 
+                   href={`https://stellar.expert/explorer/testnet/tx/${successTx.hash}`} 
+                   target="_blank" rel="noopener noreferrer"
+                   className="workspace-nav-link"
+                   style={{ background: "rgba(34,207,157,0.2)", padding: "0.5rem 1rem", borderRadius: "9999px", fontSize: "0.85rem", fontWeight: 600, color: "#22cf9d", textDecoration: "none" }}
+                 >
+                   Verify on Stellar ↗
+                 </a>
+                 <button 
+                   onClick={() => setSuccessTx(null)}
+                   style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "white", padding: "0.5rem 1rem", borderRadius: "9999px", fontSize: "0.85rem", cursor: "pointer" }}
+                 >
+                   Dismiss
+                 </button>
+               </div>
+            </div>
           </div>
         )}
 
