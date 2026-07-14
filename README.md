@@ -15,107 +15,327 @@
    <img src="https://img.shields.io/badge/Soroban-Smart%20Contracts-111827" alt="Soroban" />
 </p>
 
-<p align="center">✨ Fast. Transparent. Auditable. Global. ✨</p>
-
-<p align="center"><strong>Website:</strong> <a href="https://kredex.vercel.app/">kredex.vercel.app</a></p>
-<p align="center"><strong>Community / Updates:</strong> <a href="https://x.com/kredexweb3">𝕏 @kredexweb3</a></p>
-
----
-
-## 🌟 What is KRedex?
-
-Traditional credit rails are broken, leaving millions of individuals globally without access to fair financing. **KRedex** resolves this by introducing a decentralized, reputation-based micro-lending model natively built on **Stellar & Soroban**.
-
-By leveraging on-chain reputation rather than over-collateralization, KRedex enables true uncollateralized lending while protecting lenders via smart-contract escrow, automated default management, and liquidity incentives.
+<p align="center">
+  <strong>Live Platform:</strong> <a href="https://kredex.vercel.app/">https://kredex.vercel.app/</a><br/>
+  <strong>Demo Video:</strong> <a href="https://youtu.be/5tPY8XqotMM">https://youtu.be/5tPY8XqotMM</a><br/>
+  <strong>Pitch Deck:</strong> <a href="https://drive.google.com/file/d/1pajPQs91IRSjNYJGA9W5hUDOF5UMDevi/view?usp=sharing">View Presentation</a>
+</p>
 
 ---
 
-## 🔥 Key Features (Latest Version)
+## 🛑 The Problem
 
-### ⛓️ On-Chain Reputation & Credit Scoring
-- **Dynamic Scoring**: Borrowers earn reputation points for on-time repayments and lose points for late payments or defaults, all tracked natively in a Soroban smart contract.
-- **Public API (`/api/reputation/[address]`)**: The reputation system acts as a public good. Any Stellar protocol or dApp can query a wallet's KRedex score via a CORS-open, Redis-cached API.
+Traditional credit systems exclude billions of underbanked individuals due to rigid collateral requirements and centralized, high-friction processes. This leads to a massive liquidity gap where capital cannot reach the people who need it most for micro-enterprises, education, and personal growth. Without a traditional credit score, millions are trapped outside the financial system.
 
-### 🏅 Soulbound NFT Badges
-- Borrowers who reach Elite status (Gold / Platinum) are awarded **Soulbound NFTs**.
-- The `reputation_nft` Soroban contract enforces non-transferability at the chain level (`transfer()` panics). 
-- Beautiful animated badge components natively integrate into the borrower profile.
+## 💡 How KRedex Solves This
 
-### 💸 Stellar Disbursement Platform (SDP)
-- **Batch Payouts**: Admins can fund up to **500 approved loans at once** using the SDP engine.
-- Groups transactions into 100-operation chunks, signs server-side via a treasury key, and provides automated exponential-backoff retries and comprehensive audit logging.
+**KRedex** decentralizes lending by using **on-chain reputation** instead of over-collateralization. By combining Stellar's low-fee infrastructure, SEP-12 KYC compliance, and Soroban smart contracts, KRedex creates a transparent environment where borrowers build creditworthiness over time based on their real repayment history. Lenders are protected through escrow contracts, dynamic risk models, and automated defaults, allowing seamless and secure peer-to-peer liquidity.
 
-### 🪪 SEP-12 KYC Integration
-- **Compliance out-of-the-box**: Acts as a native KYC server following the Stellar SEP-12 standard.
-- Verifying your identity on Kredex makes you compliant across the entire Stellar ecosystem.
+## 🌍 Real World Example
 
-### 💧 Aquarius (AQUA) Liquidity Incentives
-- Lenders earn **AQUA tokens** on top of standard APY for providing liquidity to specific lending pools, driving deep liquidity for borrowers.
+A small business owner in an emerging market needs $500 for inventory but lacks traditional bank collateral. Through KRedex, they verify their identity (KYC) and borrow smaller amounts first (e.g., $50). As they repay on time, their on-chain reputation score increases, unlocking the $500 loan with lower interest rates. Meanwhile, a lender on the other side of the world funds this loan directly, earning a solid yield on their capital with full blockchain transparency.
 
-### 🔐 Passwordless & Wallet Authentication
-- Log in seamlessly using a biometric **Passkey** or by signing a secure challenge via your **Freighter Wallet**. No passwords to remember or lose.
+## 💼 Business Model & Advantages
 
----
+**How KRedex Earns:** 
+The platform generates revenue by charging a small protocol fee (e.g., 1-2%) on successfully funded loans and a fractional performance fee on the yield generated from automated liquidity pools.
 
-## 🛠️ Technology Stack
-- **Frontend:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4
-- **Backend & Database:** Supabase Auth, PostgreSQL, Supabase RLS, Redis (Upstash)
-- **Smart Contracts:** Soroban Smart Contracts (Rust) compiled to WASM
-- **Blockchain:** Stellar Testnet / Mainnet
+**Lender Advantages:**
+- Access to higher yields compared to traditional savings.
+- Diversified risk across borrower pools.
+- Ability to earn AQUA token incentives for providing liquidity.
+
+**Borrower Advantages:**
+- Access to uncollateralized capital.
+- Lower interest rates for good behavior (gamified via Soulbound NFTs).
+- A verifiable on-chain credit history that belongs directly to the user, not a centralized credit bureau.
 
 ---
 
-## ⚙️ Development Setup
+## 📝 Feedback & Responses
 
-### 1) Prerequisites
-- Node.js 18+
-- Rust toolchain (`rustup target add wasm32-unknown-unknown`)
-- [Stellar CLI](https://developers.stellar.org/docs/build/smart-contracts/getting-started/setup)
-
-### 2) Install Dependencies
-```bash
-npm install
-```
-
-### 3) Environment Variables
-Copy `.env.example` to `.env.local` and fill in your Supabase, Redis, and Stellar credentials.
-
-### 4) Run the Application
-```bash
-# Start Next.js development server
-npm run dev
-
-# Production build and lint
-npm run build
-npm run lint
-```
-
-### 5) Smart Contracts
-To build and deploy the Soroban contracts to the Stellar Testnet:
-```bash
-cd contracts
-cargo build --target wasm32-unknown-unknown --release
-# Deploy using Stellar CLI or the included deploy.ps1 script
-```
+We actively listen to our users! 
+- **Feedback Form:** [Google Forms Link](https://forms.gle/mKWhbRfxiwmz4Xq39)
+- **Response Sheet:** [View Public Responses](https://docs.google.com/spreadsheets/d/1Ry2y6oU-l_5xsoHCZBUtAif5JXfVk5puvN5nXovmGnw/edit?usp=sharing)
 
 ---
 
-## 📂 Project Structure
+## 📸 Platform Previews
+
+<p align="center">
+  <img src="assets/main-dashboard.png" alt="Main Dashboard" width="800" />
+  <br/><em>Main Dashboard - The gateway to KRedex.</em>
+</p>
+<p align="center">
+  <img src="assets/analytics.png" alt="Platform Analytics" width="800" />
+  <br/><em>Platform Analytics and Performance Metrics.</em>
+</p>
+
+### 🔐 Authentication
+<p align="center">
+  <img src="assets/auth-screen.png" alt="Authentication" width="800" />
+  <br/><em>Seamless Wallet and Passkey Authentication.</em>
+</p>
+
+### 👤 Borrower Dashboard
+<p align="center">
+  <img src="assets/borrower/home.png" alt="Borrower Home" width="800" />
+  <br/><em>Borrower Home - Quick overview of credit and active loans.</em>
+</p>
+<p align="center">
+  <img src="assets/borrower/apply-loan.png" alt="Apply for Loan" width="800" />
+  <br/><em>Apply for a new loan directly on-chain.</em>
+</p>
+<p align="center">
+  <img src="assets/borrower/trust-score.png" alt="Trust Score" width="800" />
+  <br/><em>On-chain Reputation and Trust Score management.</em>
+</p>
+<p align="center">
+  <img src="assets/borrower/repay.png" alt="Repay Loan" width="800" />
+  <br/><em>Flexible repayment options through escrow.</em>
+</p>
+<p align="center">
+  <img src="assets/borrower/history.png" alt="Borrower History" width="800" />
+  <br/><em>Complete transaction history for the borrower.</em>
+</p>
+<p align="center">
+  <img src="assets/borrower/profile.png" alt="Borrower Profile" width="800" />
+  <br/><em>Profile management and verification status.</em>
+</p>
+
+### 🏦 Lender Dashboard
+<p align="center">
+  <img src="assets/lender/home.png" alt="Lender Home" width="800" />
+  <br/><em>Lender Home - Track your capital and yield.</em>
+</p>
+<p align="center">
+  <img src="assets/lender/marketplace.png" alt="Loan Marketplace" width="800" />
+  <br/><em>Direct P2P Loan Marketplace for targeted investments.</em>
+</p>
+<p align="center">
+  <img src="assets/lender/pool.png" alt="Liquidity Pools" width="800" />
+  <br/><em>Automated Liquidity Pools for diversified exposure.</em>
+</p>
+<p align="center">
+  <img src="assets/lender/portfolio.png" alt="Lender Portfolio" width="800" />
+  <br/><em>Detailed breakdown of your lending portfolio and profits.</em>
+</p>
+<p align="center">
+  <img src="assets/lender/transection-history.png" alt="Lender Transaction History" width="800" />
+  <br/><em>Full chronological ledger of your deployed capital.</em>
+</p>
+<p align="center">
+  <img src="assets/lender/profile.png" alt="Lender Profile" width="800" />
+  <br/><em>Lender settings and configuration.</em>
+</p>
+
+### 🛡️ Admin & Treasury
+<p align="center">
+  <img src="assets/admin/overview.png" alt="Admin Overview" width="800" />
+  <br/><em>Admin Overview - Platform health and key metrics.</em>
+</p>
+<p align="center">
+  <img src="assets/admin/activity.png" alt="Treasury Activity" width="800" />
+  <br/><em>Global treasury movement and transaction volume.</em>
+</p>
+<p align="center">
+  <img src="assets/admin/kyc-review.png" alt="KYC Review" width="800" />
+  <br/><em>SEP-12 compliance and identity verification review.</em>
+</p>
+<p align="center">
+  <img src="assets/admin/user&segments.png" alt="Users and Segments" width="800" />
+  <br/><em>User management and platform segmentation.</em>
+</p>
+
+### Analytics 
+
+<p align="center">
+  <img src="assets/analytics.png" alt="Loan Analytics" width="800" />
+  <br/><em>Traffic on the website</em>
+</p>
+
+### 📱 Mobile Experience
+<p align="center">
+  <img src="assets/mobile/mob-auth.png" alt="Mobile Auth" width="400" />
+  <img src="assets/mobile/mob-dashboard.png" alt="Mobile Dashboard" width="400" />
+  <br/><em>Responsive mobile experience for lending on the go.</em>
+</p>
+
+---
+
+## 🛠️ Tech Stack Details
+
+| Category | Technology | Description |
+| :--- | :--- | :--- |
+| **Frontend** | Next.js 16, React 19 | App Router, Server Actions, modern UI components. |
+| **Styling** | Tailwind CSS 4 | Utility-first styling for beautiful responsive design. |
+| **Backend & DB** | Supabase, PostgreSQL | User authentication, relational data, and RLS. |
+| **Caching** | Upstash Redis | High-speed caching for reputation scores and RPC requests. |
+| **Blockchain** | Stellar SDK, Freighter | Native Stellar network integration and wallet signing. |
+| **Smart Contracts** | Soroban (Rust) | WASM-compiled contracts for core lending logic and escrow. |
+
+---
+
+## 🔗 Stellar Blockchain Integration
+
+KRedex heavily utilizes the Stellar network for its unprecedented speed and microscopic transaction fees. 
+- **Soroban Smart Contracts:** Deployed natively on Stellar Testnet for executing decentralized logic (Reputation, Escrow, Lending).
+- **Stellar Assets:** Uses native XLM for loans, repayments, and liquidity pools.
+- **SEP-12 KYC Integration:** Native compliance out-of-the-box for all user onboarding.
+- **Account Abstraction:** Smart Account Kit integration for seamless, passwordless passkey transactions.
+
+---
+
+## 📂 File Architecture
+
 ```text
 kredex/
 ├─ app/                    # Next.js App Router (Pages, APIs, Server Actions)
-├─ components/             # React UI components and layouts
+│  ├─ api/                 # API Routes (KYC, Loans, Notifications)
+│  ├─ dashboard/           # Role-based dashboards (Admin, Borrower, Lender)
+│  └─ globals.css          # Global styling
+├─ components/             # Reusable React UI components
+│  ├─ dashboard/           # Dashboard specific widgets (Metrics, Forms, Tables)
+│  └─ ui/                  # Core UI elements (Buttons, Modals, Loaders)
 ├─ contracts/              # Soroban smart contracts (Rust)
 │  ├─ borrower_reputation/ # Reputation scoring logic
 │  ├─ reputation_nft/      # Soulbound NFT badges
 │  ├─ lending/             # Core loan logic
-│  ├─ escrow/              # Funds security
-│  └─ default_management/  # Liquidation & insurance
-├─ lib/                    # SDKs (Stellar, Soroban, Supabase, Redis, KYC)
-├─ sql/                    # DB Migrations & RLS policies
-└─ types/                  # Shared TypeScript models
+│  └─ escrow/              # Funds security
+├─ lib/                    # SDKs, utilities, and integrations
+│  ├─ stellar/             # Stellar SDK helpers, Soroban wrappers
+│  ├─ auth/                # Supabase session and authorization
+│  └─ prisma.ts            # Database client definition
+├─ prisma/                 # Prisma ORM schema and migrations
+├─ public/                 # Static assets (Logos, Fonts, Images)
+└─ types/                  # Shared TypeScript interfaces and types
 ```
 
 ---
 
-*Done with ❤️ by the KRedex Team.*
+## 🗺️ Project Workflows
+
+### Core Platform Architecture
+```mermaid
+graph TD
+  A[Borrower] -->|Request Loan| B(KRedex Platform)
+  C[Lender] -->|Provide Capital| B
+  B -->|Smart Contract Execution| D{Stellar Network}
+  D -->|Disburse Funds| A
+  A -->|Repay Loan + Interest| D
+  D -->|Distribute Returns| C
+  E[Admin] -->|KYC & Treasury Override| B
+```
+
+### User Transaction Flow
+```mermaid
+sequenceDiagram
+  participant B as Borrower
+  participant K as KRedex
+  participant L as Lender
+  participant S as Soroban Contracts
+  
+  B->>K: Complete KYC & Apply for Loan
+  K->>S: Assess Reputation Score
+  K->>L: List Loan on Marketplace
+  L->>S: Fund Loan via Escrow
+  S->>B: Disburse XLM to Borrower
+  B->>S: Make Repayment (XLM)
+  S->>L: Release Principal + Interest
+  S->>K: Update Reputation Score (+/-)
+```
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+| :--- | :--- |
+| **On-Chain Reputation** | Dynamic scoring where good borrowers earn reputation points tracked on Soroban. |
+| **Soulbound NFTs** | High-reputation users receive non-transferable NFT badges (Gold/Platinum). |
+| **Automated Liquidity Pools** | Lenders can deposit into automated pools for instant yield diversification. |
+| **Stellar Disbursement** | Admins can fund up to 500 approved loans at once using the SDP engine. |
+| **Passwordless Auth** | Login seamlessly using biometric Passkeys or Freighter wallet signatures. |
+| **SEP-12 KYC Integration** | Out-of-the-box compliance acting as a native Stellar KYC server. |
+
+---
+
+## 📜 Smart Contracts
+
+| Contract Name | Contract ID (Stellar Testnet) | Verification | Functionality |
+| :--- | :--- | :--- | :--- |
+| **Reputation** | `CCICPDIYJIRTMWSXSTLDBTEQXBIMALBLHODQJ62FAKSU3TKEFWBB4EZ7` | [🔗 Verify](https://stellar.expert/explorer/testnet/contract/CCICPDIYJIRTMWSXSTLDBTEQXBIMALBLHODQJ62FAKSU3TKEFWBB4EZ7) | Tracks user credit scores natively on-chain. |
+| **Escrow** | `CBDVGF5KYW2SWP5XYIDNCQXSWDG7UYFXAR75SCOHTWDM3KR5NNZNR22S` | [🔗 Verify](https://stellar.expert/explorer/testnet/contract/CBDVGF5KYW2SWP5XYIDNCQXSWDG7UYFXAR75SCOHTWDM3KR5NNZNR22S) | Secures lender funds and manages collateral routing. |
+| **Lending** | `CATWVUHA7SFVCAR4OTA7GXM4LOLCFSTXEXHMINM2BZYUCELWQG46BEBP` | [🔗 Verify](https://stellar.expert/explorer/testnet/contract/CATWVUHA7SFVCAR4OTA7GXM4LOLCFSTXEXHMINM2BZYUCELWQG46BEBP) | Core loan logic, interest calculation, and repayment terms. |
+| **Default Mgmt** | `CACK4Q7YAXC3UTDJ74ERT54FUBXJJ5ZH73GL2S4WPM3Y6MOYZE2QUUZ5` | [🔗 Verify](https://stellar.expert/explorer/testnet/contract/CACK4Q7YAXC3UTDJ74ERT54FUBXJJ5ZH73GL2S4WPM3Y6MOYZE2QUUZ5) | Handles liquidation thresholds and insurance payouts. |
+
+*You can verify transactions and state for these contracts using the [Stellar Expert Testnet Explorer](https://stellar.expert/explorer/testnet).*
+
+---
+
+## 🛑 Error Handling
+
+| Error Type | Detection Mechanism | Resolution / Fallback |
+| :--- | :--- | :--- |
+| **RPC Rate Limiting** | Next.js API interceptors catch `429 Too Many Requests`. | Upstash Redis caches RPC reads; exponential backoff implemented for writes. |
+| **Soroban Execution Failure** | Freighter/Albedo rejects signature or contract panics. | Rollback Prisma database state; display user-friendly toast notification. |
+| **Insufficient Liquidity** | Pool withdraw API checks balance before transaction. | Graceful UI rejection; alerts admin to rebalance treasury. |
+| **KYC Verification Failed** | SEP-12 API webhook returns `REJECTED` status. | Locks borrower loan requests; prompts user to re-submit documents. |
+
+---
+
+## 🧪 Testing Guide
+
+To test the KRedex platform locally:
+1. **Prisma Studio**: Run `npx prisma studio` to view database tables and manipulate mocked data.
+2. **E2E Seed**: Run `npm run e2e:seed` to populate the database with test borrowers, lenders, and active loans.
+3. **Freighter Wallet**: Ensure your Freighter wallet is set to **Testnet** and funded via the Stellar Laboratory friendbot.
+
+### Testing Screenshots
+<p align="center">
+  <img src="assets/test/Screenshot 2026-06-27 172659.png" alt="Test Flow 1" width="600" />
+  <img src="assets/test/Screenshot 2026-07-07 183743.png" alt="Test Flow 2" width="600" />
+  <br/><em>Automated E2E seeding and testing interface.</em>
+</p>
+
+---
+
+## ⚙️ Project Setup Guide
+
+**1. Prerequisites**
+- Node.js 18+
+- Rust toolchain (`rustup target add wasm32-unknown-unknown`)
+- [Stellar CLI](https://developers.stellar.org/docs/build/smart-contracts/getting-started/setup)
+
+**2. Install Dependencies**
+```bash
+npm install
+```
+
+**3. Environment Configuration**
+Copy `.env.example` to `.env.local` and populate the necessary Supabase, Redis, and Stellar keys.
+
+**4. Database Setup**
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+**5. Run the Application**
+```bash
+npm run dev
+```
+
+---
+
+## 🚀 Future Implementation on Mainnet
+
+As KRedex transitions to the Stellar Mainnet, the following implementations are planned:
+- **Fiat On/Off Ramps:** Integration with MoneyGram Access for seamless cash-to-crypto onboarding.
+- **Stablecoin Integration:** Defaulting loans to USDC to mitigate XLM price volatility for borrowers and lenders.
+- **Decentralized Oracles:** Real-time interest rate adjustments based on global macro-economic data feeds via Soroban oracles.
+- **Institutional Liquidity Pools:** Permissioned pools designed for institutional lenders with customized compliance requirements.
+
+---
+
+*Thank you for the opportunity. Love Building! ❤️*
