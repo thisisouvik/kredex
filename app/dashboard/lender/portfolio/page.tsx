@@ -46,7 +46,7 @@ export default async function LenderPortfolioPage() {
   const marketplaceReceived = lenderRepays.reduce((s, t) => s + Number(t.amount), 0);
   const marketplaceProfit = Math.max(0, marketplaceReceived - marketplaceDeployed);
 
-  const poolProfit = positions.reduce((s, r) => s + Number(r.earnedInterest ?? 0), 0);
+  const poolProfit = positions.reduce((s, r) => s + (Number(r.earnedInterest ?? 0) / 10_000_000), 0);
 
   return (
     <WorkspaceFrame
@@ -92,7 +92,7 @@ export default async function LenderPortfolioPage() {
                 {poolProfit > 0 ? "+" : ""}{poolProfit.toFixed(4)} XLM
               </p>
               <div style={{ fontSize: "0.85rem", opacity: 0.8, display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.2)", paddingTop: "0.5rem", marginTop: "0.5rem" }}>
-                 <span>Total Deployed: {positions.reduce((s,p) => s + Number(p.principalAmount), 0).toFixed(2)} XLM</span>
+                 <span>Total Deployed: {positions.reduce((s,p) => s + (Number(p.principalAmount) / 10_000_000), 0).toFixed(2)} XLM</span>
                  <span>Positions: {positions.length}</span>
               </div>
            </article>
@@ -125,8 +125,8 @@ export default async function LenderPortfolioPage() {
                                   {String(position.status).toUpperCase()}
                                </span>
                              </td>
-                             <td>{Number(position.principalAmount ?? 0).toFixed(2)} XLM</td>
-                             <td style={{ color: "#22cf9d", fontWeight: "bold" }}>+{Number(position.earnedInterest ?? 0).toFixed(4)} XLM</td>
+                             <td>{(Number(position.principalAmount ?? 0) / 10_000_000).toFixed(2)} XLM</td>
+                             <td style={{ color: "#22cf9d", fontWeight: "bold" }}>+{(Number(position.earnedInterest ?? 0) / 10_000_000).toFixed(4)} XLM</td>
                           </tr>
                         ))}
                      </tbody>

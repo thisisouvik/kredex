@@ -188,31 +188,38 @@ export function RepaymentForm({ loanAmount, repaidAmount, onSubmit }: RepaymentF
 
       {error && <p className="workspace-error">{error}</p>}
 
-      <div className="workspace-form-actions" style={{ flexDirection: "column", gap: "0.6rem", marginTop: "0.6rem" }}>
+      <div className="workspace-form-actions" style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginTop: "1rem" }}>
         <button
           type="button"
           onClick={handlePayFull}
           disabled={loading}
           className="workspace-button workspace-button--primary"
-          style={{ width: "100%" }}
+          style={{ width: "100%", padding: "1rem" }}
         >
           {loading ? "Processing..." : "Pay Full Amount"}
         </button>
-        <div style={{ display: "flex", gap: "0.6rem" }}>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <hr style={{ flex: 1, border: "none", borderTop: "1px solid var(--border)", margin: 0 }} />
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>OR</span>
+          <hr style={{ flex: 1, border: "none", borderTop: "1px solid var(--border)", margin: 0 }} />
+        </div>
+
+        <div style={{ display: "flex", gap: "0.75rem" }}>
           <button
             type="button"
             onClick={handlePayMinimum}
             disabled={loading}
             className="workspace-button workspace-button--secondary"
-            style={{ flex: 1 }}
+            style={{ flex: 1, padding: "0.85rem" }}
           >
             {loading ? "Processing..." : "Pay Minimum"}
           </button>
           <button
             type="submit"
             disabled={loading || !amount}
-            className="workspace-button workspace-button--primary"
-            style={{ flex: 1 }}
+            className={`workspace-button ${amount ? "workspace-button--primary" : "workspace-button--secondary"}`}
+            style={{ flex: 1, padding: "0.85rem" }}
           >
             {loading ? "Processing..." : "Pay Custom"}
           </button>
