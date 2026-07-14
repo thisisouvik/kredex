@@ -53,10 +53,13 @@ export default async function AdminActivityPage() {
   const weeklyStart = baseTime - 7 * 24 * 60 * 60 * 1000;
   const monthlyStart = baseTime - 30 * 24 * 60 * 60 * 1000;
 
-  const amounts = rows.map((row) => ({
-    amount: Number(row.amount ?? 0),
-    createdAt: String(row.createdAt ?? ""),
-  }));
+  const amounts = rows.map((row) => {
+    const isPoolTx = row.refType === "pool_deposit" || row.refType === "pool_withdraw";
+    return {
+      amount: isPoolTx ? Number(row.amount ?? 0) / 10_000_000 : Number(row.amount ?? 0),
+      createdAt: String(row.createdAt ?? ""),
+    };
+  });
 
   const today = sumByPeriod(amounts, todayStart);
   const weekly = sumByPeriod(amounts, weeklyStart);
@@ -66,7 +69,8 @@ export default async function AdminActivityPage() {
   const topUsersMap = new Map<string, number>();
   for (const row of rows) {
     const userId = String(row.userId ?? "");
-    const amount = Number(row.amount ?? 0);
+    const isPoolTx = row.refType === "pool_deposit" || row.refType === "pool_withdraw";
+    const amount = isPoolTx ? Number(row.amount ?? 0) / 10_000_000 : Number(row.amount ?? 0);
     if (!userId) {
       continue;
     }
@@ -84,10 +88,11 @@ export default async function AdminActivityPage() {
       if (!txHash) {
         txHash = extractPossibleTxHash(row.metadata) ?? null;
       }
+      const isPoolTx = row.refType === "pool_deposit" || row.refType === "pool_withdraw";
       return {
         id: String(row.id),
         userId: String(row.userId ?? ""),
-        amount: Number(row.amount ?? 0),
+        amount: isPoolTx ? Number(row.amount ?? 0) / 10_000_000 : Number(row.amount ?? 0),
         category: String(row.refType ?? "unknown"),
         status: String(row.status ?? "pending"),
         createdAt: String(row.createdAt ?? ""),

@@ -6,7 +6,8 @@ interface Notification {
   id: string;
   title: string;
   message: string;
-  created_at: string;
+  createdAt?: string;
+  created_at?: string;
   read: boolean;
 }
 
@@ -140,7 +141,7 @@ export function NotificationWidget() {
                           {notification.message}
                         </p>
                         <p style={{ margin: "0.35rem 0 0", fontSize: "0.75rem", color: "#7a86a8" }}>
-                          {new Date(notification.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          {new Date(notification.createdAt || notification.created_at || new Date()).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
                     </div>

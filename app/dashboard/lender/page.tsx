@@ -204,8 +204,8 @@ export default async function LenderHomePage() {
                             {String(pos.status ?? "active").toUpperCase()}
                           </span>
                         </td>
-                        <td><strong>{Number(pos.principalAmount ?? 0).toFixed(2)} XLM</strong></td>
-                        <td style={{ color: "#22cf9d" }}>{Number(pos.earnedInterest ?? 0).toFixed(4)} XLM</td>
+                        <td><strong>{(Number(pos.principalAmount ?? 0) / 10_000_000).toFixed(2)} XLM</strong></td>
+                        <td style={{ color: "#22cf9d" }}>{(Number(pos.earnedInterest ?? 0) / 10_000_000).toFixed(4)} XLM</td>
                       </tr>
                     ))}
                   </tbody>
