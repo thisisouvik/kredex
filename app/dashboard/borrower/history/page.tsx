@@ -37,7 +37,7 @@ export default async function BorrowerHistoryPage() {
       if (targetId) {
         loanTxMap[targetId] = {
           hash: String(entry.txHash || meta.txHash || ""),
-          amount: Number(entry.amount ?? 0) / 10_000_000,
+          amount: Number(entry.amount ?? 0),
           date: entry.createdAt.toISOString(),
         };
       }
@@ -65,7 +65,7 @@ export default async function BorrowerHistoryPage() {
     if (!targetId) continue;
     requestTxMap[targetId] = {
       date: entry.createdAt.toISOString(),
-      amount: Number(entry.amount ?? 0) / 10_000_000,
+      amount: Number(entry.amount ?? 0),
     };
   }
 
@@ -73,7 +73,7 @@ export default async function BorrowerHistoryPage() {
   for (const loan of loans) {
     const loanId = loan.id;
     const requestTx = requestTxMap[loanId];
-    const amount = requestTx?.amount ?? (Number(loan.principalAmount ?? 0) / 10_000_000);
+    const amount = requestTx?.amount ?? Number(loan.principalAmount ?? 0);
     const date = requestTx?.date || loan.createdAt.toISOString();
 
     transactions.push({
@@ -119,7 +119,7 @@ export default async function BorrowerHistoryPage() {
       id: `repay-${r.id}`,
       type: "repayment_made",
       loanId: targetId,
-      amount: Number(r.amount) / 10_000_000,
+      amount: Number(r.amount),
       date: r.createdAt.toISOString(),
       txHash: txHash ?? "",
       loanStatus: String(loan?.status ?? ""),

@@ -116,6 +116,9 @@ export default async function LenderHistoryPage() {
                 let colorClass = "gray"; // will map to styles
                 let sign = "";
 
+                const isPoolTx = tx.refType === "pool_deposit" || tx.refType === "pool_withdraw" || meta.category === "pool_deposit" || meta.category === "pool_withdraw";
+                const displayAmount = isPoolTx ? Number(tx.amount) / 10_000_000 : Number(tx.amount);
+
                 if (tx.refType === "loan_fund") {
                    label = "P2P Loan Deployed"; icon = "🏦"; colorClass = "purple"; sign = "-";
                 } else if (tx.refType === "loan_repay") {
@@ -165,7 +168,7 @@ export default async function LenderHistoryPage() {
                     {/* Amount */}
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
                       <p style={{ margin: 0, fontWeight: 800, fontSize: "0.95rem", color: c.text }}>
-                        {sign}{(Number(tx.amount) / 10_000_000).toFixed(2)} XLM
+                        {sign}{displayAmount.toFixed(2)} XLM
                       </p>
                     </div>
 
