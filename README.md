@@ -14,10 +14,14 @@
    <img src="https://img.shields.io/badge/Stellar-Testnet-08B5E5" alt="Stellar" />
    <img src="https://img.shields.io/badge/Soroban-Smart%20Contracts-111827" alt="Soroban" />
 </p>
+<br>
 
-<p align="center">
+---
+<p>
   <strong>Live Platform:</strong> <a href="https://kredex.vercel.app/">https://kredex.vercel.app/</a><br/>
+
   <strong>Demo Video:</strong> <a href="https://youtu.be/5tPY8XqotMM">https://youtu.be/5tPY8XqotMM</a><br/>
+
   <strong>Pitch Deck:</strong> <a href="https://drive.google.com/file/d/1pajPQs91IRSjNYJGA9W5hUDOF5UMDevi/view?usp=sharing">View Presentation</a>
 </p>
 
@@ -65,10 +69,6 @@ We actively listen to our users!
 <p align="center">
   <img src="assets/main-dashboard.png" alt="Main Dashboard" width="800" />
   <br/><em>Main Dashboard - The gateway to KRedex.</em>
-</p>
-<p align="center">
-  <img src="assets/analytics.png" alt="Platform Analytics" width="800" />
-  <br/><em>Platform Analytics and Performance Metrics.</em>
 </p>
 
 ### 🔐 Authentication

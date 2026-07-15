@@ -243,7 +243,7 @@ interface LenderFormsProps {
 
 export function LenderForms({ pools, positions, platformAddress }: LenderFormsProps) {
   const router = useRouter();
-  const [successTx, setSuccessTx] = useState<{poolName: string; amount: number; hash: string} | null>(null);
+  const [successTx, setSuccessTx] = useState<{type: "deposit" | "withdraw"; poolName: string; amount: number; hash: string} | null>(null);
 
   const PLATFORM_WALLET =
     platformAddress ??
@@ -356,7 +356,7 @@ export function LenderForms({ pools, positions, platformAddress }: LenderFormsPr
     }
 
     const depositedPool = pools.find(p => p.id === poolId);
-    setSuccessTx({ poolName: depositedPool?.name ?? "Pool", amount, hash: txHash });
+    setSuccessTx({ type: "deposit", poolName: depositedPool?.name ?? "Pool", amount, hash: txHash });
 
     router.refresh();
   };
@@ -369,13 +369,13 @@ export function LenderForms({ pools, positions, platformAddress }: LenderFormsPr
         body: JSON.stringify({ positionId, amount }),
       });
 
+      const data = await response.json();
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to withdraw");
+        throw new Error(data.error || "Failed to withdraw");
       }
 
       router.refresh();
-      alert("Withdrawal request submitted!");
+      setSuccessTx({ type: "withdraw", poolName: "Position " + positionId.slice(0, 8), amount, hash: data.txHash });
     } catch (error) {
       throw error;
     }
@@ -400,9 +400,14 @@ export function LenderForms({ pools, positions, platformAddress }: LenderFormsPr
               minWidth: "320px", textAlign: "center",
               animation: "slideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
             }}>
-               <h4 style={{ color: "#22cf9d", margin: "0 0 0.75rem 0", fontSize: "1.2rem" }}>✅ Deposit Successful!</h4>
+               <h4 style={{ color: "#22cf9d", margin: "0 0 0.75rem 0", fontSize: "1.2rem" }}>
+                 ✅ {successTx.type === "deposit" ? "Deposit Successful!" : "Withdrawal Successful!"}
+               </h4>
                <p style={{ margin: "0 0 1rem 0", fontSize: "0.9rem", opacity: 0.9, color: "white" }}>
-                  You successfully deployed <strong>{successTx.amount} XLM</strong> into the <strong>{successTx.poolName}</strong>.
+                  {successTx.type === "deposit" 
+                    ? <>You successfully deployed <strong>{successTx.amount} XLM</strong> into the <strong>{successTx.poolName}</strong>.</>
+                    : <>You successfully withdrew <strong>{successTx.amount} XLM</strong> from <strong>{successTx.poolName}</strong>.</>
+                  }
                </p>
                <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
                  <a 

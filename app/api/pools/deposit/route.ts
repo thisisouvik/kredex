@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import prisma from "@/lib/prisma";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { invalidateCache } from "@/lib/redis/cache";
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,9 +95,12 @@ export async function POST(request: NextRequest) {
         metadata: {
           lenderAddress: lenderAddress ?? null,
           poolId,
+          message: `You successfully deposited ${amount} XLM into the pool.`,
         }
       }
     });
+
+    await invalidateCache(`metrics:lender:${user.id}`);
 
     return NextResponse.json(
       {
