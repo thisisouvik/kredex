@@ -145,6 +145,7 @@ export default async function BorrowerDashboardPage() {
               You need to connect a Stellar wallet before you can receive or repay loans.
               Head to <strong>Profile &amp; Settings</strong> to set it up.
             </p>
+          </article>
         )}
 
         {/* ── Trust Score Information ── */}

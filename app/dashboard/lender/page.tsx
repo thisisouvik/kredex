@@ -88,6 +88,16 @@ export default async function LenderHomePage() {
     >
       <div className="workspace-stack">
 
+        {/* ── Role Information & Security (Feedback by Aditya Jha, Soumen Das) ── */}
+        <article className="workspace-card workspace-card--full" style={{ background: "rgba(59,130,246,0.05)", border: "1px solid rgba(59,130,246,0.2)" }}>
+          <h2 className="workspace-card-title" style={{ fontSize: "1.1rem" }}>
+            🔒 Secure Lender Profile
+          </h2>
+          <p className="workspace-card-copy" style={{ marginTop: "0.5rem", fontSize: "0.85rem", opacity: 0.9 }}>
+            You are logged into a <strong>Lender</strong> account. To ensure a safe and verified environment, accounts are strictly role-locked. A user cannot borrow and lend from the same account. Explore the marketplace or pool facilities below.
+          </p>
+        </article>
+
         {/* ── Quick action cards ──────────────────────────────────── */}
         <section className="workspace-grid workspace-grid--two">
 
