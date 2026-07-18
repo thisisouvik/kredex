@@ -4,7 +4,7 @@ import { footerLinks, navItems, aboutContent, p2pSteps } from "@/lib/content/lan
 
 export const metadata = {
   title: "P2P Lending | Kredex",
-  description: "Transparent peer-to-peer lending powered by Stellar and USDC.",
+  description: "Transparent peer-to-peer lending powered by Stellar and XLM.",
 };
 
 export default async function P2PPage() {

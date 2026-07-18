@@ -30,8 +30,9 @@ export const metadata: Metadata = {
     "reputation score",
     "unbanked",
     "gig economy",
-    "USDC lending",
-    "crypto lending",
+    "XLM lending",
+    "defi",
+    "crypto loans",
   ],
   authors: [{ name: "Kredex" }],
   icons: {

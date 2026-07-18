@@ -115,7 +115,7 @@ export default async function UnifiedDashboardPage() {
 
             <h2 className="heading-md" style={{ margin: "0.75rem 0 0.5rem" }}>Need Capital?</h2>
             <p className="text-secondary" style={{ fontSize: "0.9rem", lineHeight: 1.65, marginBottom: "1.5rem" }}>
-              Leverage your on-chain reputation to access undercollateralized micro-loans in USDC. Repay on-time and unlock higher limits.
+              Leverage your on-chain reputation to access undercollateralized micro-loans in XLM. Repay on-time and unlock higher limits.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1.75rem" }}>
@@ -171,7 +171,7 @@ export default async function UnifiedDashboardPage() {
 
             <h2 className="heading-md" style={{ margin: "0.75rem 0 0.5rem" }}>Earn Yield</h2>
             <p className="text-secondary" style={{ fontSize: "0.9rem", lineHeight: 1.65, marginBottom: "1.5rem" }}>
-              Fund verified borrowers and earn transparent, risk-adjusted USDC returns. Browse the marketplace and commit on your terms.
+              Fund verified borrowers and earn transparent, risk-adjusted XLM returns. Browse the marketplace and commit on your terms.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1.75rem" }}>
@@ -209,7 +209,7 @@ export default async function UnifiedDashboardPage() {
       }}>
         {[
           { icon: "🔐", label: "Your wallet = your account", sub: "No passwords. No email required." },
-          { icon: "⚡", label: "Atomic USDC escrow", sub: "Funds settle on Stellar in seconds." },
+          { icon: "⚡", label: "Atomic XLM escrow", sub: "Funds settle on Stellar in seconds." },
           { icon: "📈", label: "Score improves every cycle", sub: "On-chain reputation compounds." },
         ].map((item) => (
           <div key={item.label} style={{
