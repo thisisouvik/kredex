@@ -145,8 +145,19 @@ export default async function BorrowerDashboardPage() {
               You need to connect a Stellar wallet before you can receive or repay loans.
               Head to <strong>Profile &amp; Settings</strong> to set it up.
             </p>
-          </article>
         )}
+
+        {/* ── Trust Score Information ── */}
+        <article className="workspace-card workspace-card--full" style={{ background: "linear-gradient(135deg, rgba(126,47,208,0.05), rgba(34,207,157,0.05))", border: "1px solid rgba(126,47,208,0.15)" }}>
+          <h2 className="workspace-card-title" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ fontSize: "1.2rem" }}>🛡️</span> How Your Trust Score Works
+          </h2>
+          <p className="workspace-card-copy" style={{ marginTop: "0.5rem", fontSize: "0.85rem", lineHeight: 1.6, opacity: 0.9 }}>
+            Your Trust Score represents your on-chain reputation. It governs your <strong>borrowing limits</strong> and unlocks better terms. 
+            <br />• <strong>Increase it</strong> by completing KYC and making successful, on-time repayments.
+            <br />• <strong>Decrease it</strong> heavily if a loan enters default. Protect your reputation!
+          </p>
+        </article>
 
         {/* ── KYC / verification status strip ── */}
         <article className="workspace-card workspace-card--full">
