@@ -274,6 +274,12 @@ export default function KycPage() {
         <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
           Verify once, reusable across all Stellar anchors (SEP-12)
         </p>
+        <div style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)", borderRadius: "0.5rem", padding: "0.75rem", marginTop: "1rem", display: "inline-flex", alignItems: "center", gap: "0.5rem", textAlign: "left" }}>
+           <Shield size={16} style={{ color: "#ef4444", flexShrink: 0 }} />
+           <p style={{ color: "var(--text-secondary)", fontSize: "0.8rem", margin: 0, lineHeight: 1.4 }}>
+             <strong>Strict KYC Enforcement:</strong> To protect our lenders and prevent scams, all IDs undergo manual verification and biometric checking. Fraudulent submissions will result in an immediate permanent ban.
+           </p>
+        </div>
       </div>
 
       {/* Step progress */}
