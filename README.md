@@ -62,6 +62,21 @@ We actively listen to our users!
 - **Feedback Form:** [Google Forms Link](https://forms.gle/mKWhbRfxiwmz4Xq39)
 - **Response Sheet:** [View Public Responses](https://docs.google.com/spreadsheets/d/1Ry2y6oU-l_5xsoHCZBUtAif5JXfVk5puvN5nXovmGnw/edit?usp=sharing)
 
+### User Feedback Action Report
+
+| Full Name | Wallet Address | Type of User | Feature like most | Feature it's lacking | Specific feedback or suggestion | GitHub Commit Link |
+|---|---|---|---|---|---|---|
+| Souvik Mandal | GAG3SUKHIF7VAWGTDRH52XETMLZXXNXBAZLLXHSLXAQPOBBCN43YLKR4 | Borrower | Hassle free easy p2p lending | Its fine for me. | Improvement regarding KYC must needed and strict to prevent scams. | [`4c60777`](https://github.com/commit/4c60777) |
+| Soumen Das | GCPH35WGDYMWPQDAPRWE3CTJNT7BHXAHQTRKUJLX3DTWVRGZIXSBOO74 | Borrower | Sign Up | N/A | Need ui improvement and add more information, so users can easily understand. | [`1824c2c`](https://github.com/commit/1824c2c) |
+| Shubam Dutta | GB3HF2ITUINWMX47PV65KDUXEIXVS4NPQVUGSLUSSVQB26ZHH63D5JBB4 | Borrower | Easy Borrowing | I don't think anything is lacking but the dashboard UI could be done much better. | - | [`1824c2c`](https://github.com/commit/1824c2c) |
+| Sumit Kumar | GDXRHYMYYF3ISS4JPQVZHHBHT7EVLAXFYCARK4HEXEQJ63HLMTK2OZ5I | Lender | Like the walkthrough for beginners. | I feel it's nice not much lag and also response time is good. | Make a mobile application for this too. | - |
+| Lohit Mishra | GDYWYDOBPPM2XFQS2N7OA2XYO66C24OSBDGASSYAU7V3V4UHFIQYWCRL | Lender | portfolio could be most usefull feature find the ways to enhance those | on site at lenders page its showing usdc but we are making transaction on xlm | So mainly do change the transaction rate USDC-XLM or make the application xlm | [`8f6e707`](https://github.com/commit/8f6e707) |
+| najmi | GB42MHRFP3SPFZ37HFAARZMEK6IS5U7GXIBQIFD3UWWDUBHJO5GAWS7D | Lender | POOL FACILITY FOR LENDERS ( PASSIVE INVESTMENT) | nothing, all the feature is still good | noting | - |
+| Rohit Maity | GA4DBFJ7O7VXZDFFP3DARCCQHZLVTDD4YBLS4KKLYHT2BDA3S5MEMA67 | Borrower | Loved the hassle free P2P lending | Trust Score needed to be worked the logic currently are not clear for it. | Good Platform, but it will be much better if the scoring logic will be better. | [`809acaf`](https://github.com/commit/809acaf) |
+| Saurav Suman | GCX3LFQ2BXHVEVL5VD7DZ4Y3R6WIUNUTJNZRMGRMWLM33XD2J7YFFLQA | Lender | Pool Investment facility and interest earn yielding opportunity | Its dashboard UI can be much better. | - | [`1824c2c`](https://github.com/commit/1824c2c) |
+| Aditya Jha | GALK4MID2BKRGDIFYAGRBJ3P2ZDSQJQASWMFAEMP25DPO2O5ISMXVTTB | Borrower | Locking feature like a user can't lend and borrow at the same time. | In KYC system please secure it more. | - | [`4c60777`](https://github.com/commit/4c60777) / [`1824c2c`](https://github.com/commit/1824c2c) |
+| Rupam Ghosh | GBV4FZVZKT26JNLAIMGSNUDDREZLP4ESPOMDA4X6LGBTLUP5XAP73TXI | Lender | Lending | No | No issues | - |
+
 ---
 
 ## 📸 Platform Previews
