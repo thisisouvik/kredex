@@ -7,16 +7,13 @@
     "build": "next build",
     "start": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first next start",
     "lint": "eslint",
-    "postinstall": "prisma generate",
-    "e2e:seed": "node scripts/e2e-seed-and-run.mjs"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@albedo-link/intent": "^0.13.0",
     "@prisma/client": "^5.10.0",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^16.0.1",
-    "@supabase/ssr": "^0.10.2",
-    "@supabase/supabase-js": "^2.103.0",
     "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "^2.0.1",
     "clsx": "^2.1.1",

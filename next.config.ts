@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 // Note: NODE_TLS_REJECT_UNAUTHORIZED is intentionally NOT disabled here.
-// Use the Supabase connection pooler URL in DATABASE_URL for production
-// (postgres://...pooler.supabase.com:6543/postgres?pgbouncer=true)
+// Use the NeonDB connection pooler URL in DATABASE_URL for production
+// (postgres://...neon.tech/neondb?sslmode=require&pgbouncer=true)
 
 const securityHeaders = [
   // Content Security Policy — restricts where resources can load from
@@ -14,9 +14,9 @@ const securityHeaders = [
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      // Supabase + Stellar APIs + Vercel Analytics
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://horizon-testnet.stellar.org https://horizon.stellar.org https://soroban-testnet.stellar.org https://soroban.stellar.org https://rpc-mainnet.stellar.org https://friendbot.stellar.org https://vitals.vercel-insights.com",
-      "img-src 'self' data: blob: https://*.supabase.co",
+      // Stellar APIs + Vercel Analytics
+      "connect-src 'self' https://horizon-testnet.stellar.org https://horizon.stellar.org https://soroban-testnet.stellar.org https://soroban.stellar.org https://rpc-mainnet.stellar.org https://friendbot.stellar.org https://vitals.vercel-insights.com",
+      "img-src 'self' data: blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
