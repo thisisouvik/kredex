@@ -6,9 +6,9 @@ async function main() {
       name: "XLM Test Pool",
       status: "active",
       totalLiquidity: BigInt(0),
-      availableLiquidity: BigInt(0),
-      aprBps: 500,
-      aquaAprBps: 200,
+      apy: 5.0,
+      minDeposit: BigInt(0),
+      utilizationRate: 0,
     },
   });
 
