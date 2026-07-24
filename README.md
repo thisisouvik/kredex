@@ -10,7 +10,7 @@
    <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" alt="Next.js" />
    <img src="https://img.shields.io/badge/React-19-20232A?logo=react" alt="React" />
    <img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
-   <img src="https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase&logoColor=white" alt="Supabase" />
+   <img src="https://img.shields.io/badge/NeonDB-Serverless%20Postgres-00E699?logo=postgresql&logoColor=white" alt="NeonDB" />
    <img src="https://img.shields.io/badge/Stellar-Testnet-08B5E5" alt="Stellar" />
    <img src="https://img.shields.io/badge/Soroban-Smart%20Contracts-111827" alt="Soroban" />
 </p>
@@ -184,7 +184,7 @@ We actively listen to our users!
 | :--- | :--- | :--- |
 | **Frontend** | Next.js 16, React 19 | App Router, Server Actions, modern UI components. |
 | **Styling** | Tailwind CSS 4 | Utility-first styling for beautiful responsive design. |
-| **Backend & DB** | Supabase, PostgreSQL | User authentication, relational data, and RLS. |
+| **Backend & DB** | NeonDB (Serverless Postgres) + Prisma ORM | Serverless relational database with type-safe schema and migrations. |
 | **Caching** | Upstash Redis | High-speed caching for reputation scores and RPC requests. |
 | **Blockchain** | Stellar SDK, Freighter | Native Stellar network integration and wallet signing. |
 | **Smart Contracts** | Soroban (Rust) | WASM-compiled contracts for core lending logic and escrow. |
@@ -277,8 +277,8 @@ kredex/
 │  │  ├─ escrow.ts         # EscrowContract client
 │  │  ├─ default.ts        # DefaultManagementContract client
 │  │  └─ generated/        # Auto-generated stellar-sdk bindings
-│  ├─ auth/                # Supabase session and authorization
-│  └─ prisma.ts            # Database client definition
+│  ├─ auth/                # JWT-based session management and authorization
+│  └─ prisma.ts            # NeonDB client via Prisma ORM
 ├─ prisma/                 # Prisma ORM schema and migrations
 ├─ public/                 # Static assets (Logos, Fonts, Images)
 └─ types/                  # Shared TypeScript interfaces and types
@@ -377,22 +377,16 @@ Runs automated dependency and code vulnerability scanning on the frontend.
 
 To test the KRedex platform locally:
 1. **Prisma Studio**: Run `npx prisma studio` to view database tables and manipulate mocked data.
-2. **E2E Seed**: Run `npm run e2e:seed` to populate the database with test borrowers, lenders, and active loans.
-3. **Freighter Wallet**: Ensure your Freighter wallet is set to **Testnet** and funded via the Stellar Laboratory friendbot.
-
-> **⚠️ E2E Seed Script — Local Development Only**
-> `scripts/e2e-seed-and-run.mjs` is a **local development testing utility** that creates two test accounts (`e2e.borrower@trustlend.local`, `e2e.lender@trustlend.local`) using the Supabase Admin API. 
-> This script is **strictly guarded by two security layers**:
-> 1. It requires a `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` which is **never committed** (covered by `.gitignore`).
-> 2. The dev auth bypass it relies on is gated by `process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEV_AUTH_BYPASS === 'true'` — meaning it is **completely disabled in production**.
-> The script is a standard practice in testing (similar to Jest fixtures or database seeders) and poses zero production risk.
+2. **Freighter Wallet**: Ensure your Freighter wallet is set to **Testnet** and funded via the Stellar Laboratory friendbot.
+3. **Manual Testing**: Sign up normally at `/auth`, complete KYC, and use the borrower/lender dashboards to test all flows end-to-end.
 
 ### Testing Screenshots
 <p align="center">
   <img src="assets/test/Screenshot 2026-06-27 172659.png" alt="Test Flow 1" width="600" />
   <img src="assets/test/Screenshot 2026-07-07 183743.png" alt="Test Flow 2" width="600" />
-  <br/><em>Automated E2E seeding and testing interface.</em>
+  <br/><em>Manual testing flows on the platform.</em>
 </p>
+
 
 ---
 
@@ -409,7 +403,7 @@ npm install
 ```
 
 **3. Environment Configuration**
-Copy `.env.example` to `.env.local` and populate the necessary Supabase, Redis, and Stellar keys.
+Copy `.env.example` to `.env.local` and populate the necessary NeonDB, Redis, and Stellar keys.
 
 **4. Database Setup**
 ```bash
