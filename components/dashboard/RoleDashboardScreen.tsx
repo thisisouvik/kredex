@@ -42,9 +42,9 @@ export function RoleDashboardScreen({
     let cancelled = false;
 
     const ensureRoleAccess = async () => {
-      // Use our JWT-based /api/auth/me instead of supabase.auth.getSession().
-      // Wallet login does NOT create a Supabase Auth session — getSession()
-      // always returned null and was causing incorrect redirects to signout.
+      // Use our JWT-based /api/auth/me for auth status checks.
+      // Wallet login uses JWT cookies, not legacy auth sessions —
+      // getSession() always returned null and caused incorrect redirects.
       try {
         const res = await fetch("/api/auth/me");
 

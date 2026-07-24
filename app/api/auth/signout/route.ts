@@ -6,8 +6,6 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   cookieStore.delete("Kredex_session");
 
-  // Optional: clear Supabase auth cookies if they exist
-  // We do this by expiring them
   const response = NextResponse.redirect(new URL("/auth", request.url));
   
   // Hard delete the cookie by setting it on the response as well, just to be absolutely sure

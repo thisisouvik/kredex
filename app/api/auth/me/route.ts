@@ -7,7 +7,7 @@ export const runtime = "nodejs";
  * GET /api/auth/me
  * Returns the current user from the Kredex_session JWT cookie.
  * Used by client components that need to check auth status
- * without relying on Supabase Auth (which we don't use for wallet login).
+ * without relying on legacy auth providers.
  */
 export async function GET(request: NextRequest) {
   const token = request.cookies.get("Kredex_session")?.value;

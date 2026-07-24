@@ -1,7 +1,7 @@
 "use client";
 
-// Supabase has been removed. Realtime notifications will require a new WebSocket 
-// or polling implementation if needed in the future.
+// Realtime notifications use polling via /api/notifications.
+// A WebSocket implementation can be added here in the future if needed.
 
 export function RealtimeNotifications() {
   return null;

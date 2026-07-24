@@ -10,18 +10,14 @@ export async function GET() {
       looks_valid: (process.env.JWT_SECRET?.length ?? 0) >= 32,
     },
 
-    // Supabase
-    NEXT_PUBLIC_SUPABASE_URL: {
-      present: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      value_preview: process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30) + "...",
+    // Database (NeonDB via Prisma)
+    DATABASE_URL: {
+      present: !!process.env.DATABASE_URL,
+      uses_pooler: process.env.DATABASE_URL?.includes("pooler") ?? false,
+      uses_invalid_certs: process.env.DATABASE_URL?.includes("accept_invalid") ?? false,
     },
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: {
-      present: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      length: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length ?? 0,
-    },
-    SUPABASE_SERVICE_ROLE_KEY: {
-      present: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      length: process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0,
+    DIRECT_URL: {
+      present: !!process.env.DIRECT_URL,
     },
 
     // Redis
@@ -32,13 +28,6 @@ export async function GET() {
     UPSTASH_REDIS_REST_TOKEN: {
       present: !!process.env.UPSTASH_REDIS_REST_TOKEN,
       length: process.env.UPSTASH_REDIS_REST_TOKEN?.length ?? 0,
-    },
-
-    // Database
-    DATABASE_URL: {
-      present: !!process.env.DATABASE_URL,
-      uses_pooler: process.env.DATABASE_URL?.includes("pooler") ?? false,
-      uses_invalid_certs: process.env.DATABASE_URL?.includes("accept_invalid") ?? false,
     },
 
     // Site
@@ -58,8 +47,7 @@ export async function GET() {
   // Overall health
   const critical_missing = [];
   if (!checks.JWT_SECRET.present) critical_missing.push("JWT_SECRET");
-  if (!checks.NEXT_PUBLIC_SUPABASE_URL.present) critical_missing.push("NEXT_PUBLIC_SUPABASE_URL");
-  if (!checks.NEXT_PUBLIC_SUPABASE_ANON_KEY.present) critical_missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!checks.DATABASE_URL.present) critical_missing.push("DATABASE_URL");
   if (!checks.UPSTASH_REDIS_REST_URL.present) critical_missing.push("UPSTASH_REDIS_REST_URL");
   if (!checks.UPSTASH_REDIS_REST_TOKEN.present) critical_missing.push("UPSTASH_REDIS_REST_TOKEN");
 
