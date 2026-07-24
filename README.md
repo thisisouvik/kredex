@@ -60,7 +60,7 @@ The platform generates revenue by charging a small protocol fee (e.g., 1-2%) on 
 
 We actively listen to our users! 
 - **Feedback Form:** [Google Forms Link](https://forms.gle/mKWhbRfxiwmz4Xq39)
-- **Response Sheet:** [View Public Responses](https://docs.google.com/spreadsheets/d/1Ry2y6oU-l_5xsoHCZBUtAif5JXfVk5puvN5nXovmGnw/edit?usp=sharing)
+- **Response Sheet:** [View Public Responses](https://docs.google.com/spreadsheets/d/1YXk9Lus4Xi2EwDIe0aYUcJ3wjKgEtfQU3AF6NWBf2ho/edit?usp=sharing)
 
 ### User Feedback Action Report
 
