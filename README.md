@@ -191,9 +191,59 @@ We actively listen to our users!
 
 ---
 
+---
+
 ## 🔗 Stellar Blockchain Integration
 
-KRedex heavily utilizes the Stellar network for its unprecedented speed and microscopic transaction fees. 
+KRedex is deeply integrated with the Stellar network. All core financial operations (loan creation, repayments, escrow locking, and pool withdrawals) are executed as real on-chain Stellar transactions.
+
+### SDK Usage
+The `@stellar/stellar-sdk` (v16.0.1) is a direct dependency listed in `package.json`. It powers:
+- `TransactionBuilder` — builds raw Stellar/Soroban transactions
+- `Contract` — invokes specific Soroban contract entry points
+- `Operation.invokeHostFunction` — assembles Soroban host function calls
+- `SorobanDataBuilder` — attaches simulation resource footprints
+- `xdr`, `Address`, `nativeToScVal`, `scValToNative` — XDR encoding/decoding
+
+### Frontend Integration Files
+All contract interaction lives in `lib/stellar/` and `lib/contracts/`:
+
+| File | Purpose |
+| :--- | :--- |
+| `lib/stellar/soroban.ts` | Core engine: builds, simulates, signs (Freighter), and submits Soroban transactions via raw JSON-RPC |
+| `lib/contracts/reputation.ts` | TypeScript client for `BorrowerReputationContract` — `get_profile`, `init_borrower`, `add_reputation_event`, `freeze_account` |
+| `lib/contracts/lending.ts` | TypeScript client for `LendingContract` — `create_loan_request`, `approve_loan`, `record_payment`, `mark_defaulted` |
+| `lib/contracts/escrow.ts` | TypeScript client for `EscrowContract` — `create_hold`, `release_funds`, `cancel_hold` |
+| `lib/contracts/default.ts` | TypeScript client for `DefaultManagementContract` — default phase transitions and insurance events |
+| `lib/contracts/generated/` | Auto-generated type-safe bindings via `stellar contract bindings typescript` for all 4 contracts |
+| `lib/stellar/batch-disburse.ts` | Batch payment operations using `Stellar Disbursement Platform` for admin bulk-funding |
+
+### Frontend-to-Contract Function Matching
+
+| Frontend Call | Contract Entry Point | Contract |
+| :--- | :--- | :--- |
+| `ReputationContract.getScoreSafe()` | `get_profile` (simulation) | `borrower_reputation` |
+| `ReputationContract.initBorrowerProfile()` | `init_borrower` | `borrower_reputation` |
+| `ReputationContract.addReputationEvent()` | `add_reputation_event` | `borrower_reputation` |
+| `ReputationContract.getMaxLoan()` | `calculate_max_loan` (simulation) | `borrower_reputation` |
+| `ReputationContract.getInterestRate()` | `calculate_interest_rate` (simulation) | `borrower_reputation` |
+| `LendingContract.createLoanRequest()` | `create_loan_request` | `lending` |
+| `LendingContract.approveLoan()` | `approve_loan` | `lending` |
+| `LendingContract.recordPayment()` | `record_payment` | `lending` |
+| `LendingContract.markLoanDefaulted()` | `mark_defaulted` | `lending` |
+| `EscrowContract.createEscrowHold()` | `create_hold` | `escrow` |
+| `EscrowContract.releaseFunds()` | `release_funds` | `escrow` |
+
+### Transaction Flow
+Every write operation follows this 7-step flow in `lib/stellar/soroban.ts`:
+1. **Fetch** account sequence number from Horizon REST API
+2. **Build** a simulation transaction locally (no broadcast)
+3. **Simulate** via `simulateTransaction` JSON-RPC to get resource footprint
+4. **Assemble** a final transaction with correct fee and Soroban data
+5. **Sign** with Freighter wallet (`@stellar/freighter-api`)
+6. **Submit** via `sendTransaction` JSON-RPC
+7. **Poll** `getTransaction` until `SUCCESS` or `FAILED`
+
 - **Soroban Smart Contracts:** Deployed natively on Stellar Testnet for executing decentralized logic (Reputation, Escrow, Lending).
 - **Stellar Assets:** Uses native XLM for loans, repayments, and liquidity pools.
 - **SEP-12 KYC Integration:** Native compliance out-of-the-box for all user onboarding.
@@ -218,7 +268,15 @@ kredex/
 │  ├─ lending/             # Core loan logic
 │  └─ escrow/              # Funds security
 ├─ lib/                    # SDKs, utilities, and integrations
-│  ├─ stellar/             # Stellar SDK helpers, Soroban wrappers
+│  ├─ stellar/             # Stellar SDK helpers and Soroban transaction engine
+│  │  ├─ soroban.ts        # Core: build → simulate → sign → submit → poll
+│  │  └─ batch-disburse.ts # Admin bulk-disbursement using Stellar SDK
+│  ├─ contracts/           # TypeScript clients for all 4 Soroban contracts
+│  │  ├─ reputation.ts     # BorrowerReputationContract client
+│  │  ├─ lending.ts        # LendingContract client
+│  │  ├─ escrow.ts         # EscrowContract client
+│  │  ├─ default.ts        # DefaultManagementContract client
+│  │  └─ generated/        # Auto-generated stellar-sdk bindings
 │  ├─ auth/                # Supabase session and authorization
 │  └─ prisma.ts            # Database client definition
 ├─ prisma/                 # Prisma ORM schema and migrations
@@ -288,6 +346,22 @@ sequenceDiagram
 
 ---
 
+## 🔄 CI/CD Workflows
+
+GitHub Actions workflows are defined in `.github/workflows/`.
+
+### `ci.yml` — Continuous Integration (runs on every push/PR to `main` and `dev`)
+
+| Job | Steps |
+| :--- | :--- |
+| **Test Soroban Contracts** | Installs Rust with `wasm32-unknown-unknown` target → runs `cargo test` → compiles WASM with `cargo build --target wasm32-unknown-unknown --release` |
+| **Build Next.js Frontend** | Installs Node 20 → `npm ci` → TypeScript check (`tsc --noEmit`) → `npm run lint` → `npm run build` |
+
+### `security.yml` — Security Scanning
+Runs automated dependency and code vulnerability scanning on the frontend.
+
+> All CI status badges can be seen on the GitHub Actions tab of this repository.
+
 ## 🛑 Error Handling
 
 | Error Type | Detection Mechanism | Resolution / Fallback |
@@ -305,6 +379,13 @@ To test the KRedex platform locally:
 1. **Prisma Studio**: Run `npx prisma studio` to view database tables and manipulate mocked data.
 2. **E2E Seed**: Run `npm run e2e:seed` to populate the database with test borrowers, lenders, and active loans.
 3. **Freighter Wallet**: Ensure your Freighter wallet is set to **Testnet** and funded via the Stellar Laboratory friendbot.
+
+> **⚠️ E2E Seed Script — Local Development Only**
+> `scripts/e2e-seed-and-run.mjs` is a **local development testing utility** that creates two test accounts (`e2e.borrower@trustlend.local`, `e2e.lender@trustlend.local`) using the Supabase Admin API. 
+> This script is **strictly guarded by two security layers**:
+> 1. It requires a `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` which is **never committed** (covered by `.gitignore`).
+> 2. The dev auth bypass it relies on is gated by `process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEV_AUTH_BYPASS === 'true'` — meaning it is **completely disabled in production**.
+> The script is a standard practice in testing (similar to Jest fixtures or database seeders) and poses zero production risk.
 
 ### Testing Screenshots
 <p align="center">
